@@ -132,7 +132,8 @@ input:focus, select:focus { border-color: var(--ouro2); outline: none; }
   color: #EEF2F8; padding: 48px clamp(24px, 5vw, 72px); display: flex; flex-direction: column; justify-content: center; gap: 22px;
   position: relative; overflow: hidden;
 }
-.login-lado::after { content: ""; position: absolute; right: -120px; bottom: -120px; width: 380px; height: 380px; border-radius: 50%; border: 2px solid rgba(201,165,90,.25); box-shadow: 0 0 0 26px rgba(201,165,90,.06); }
+.login-lado > * { position: relative; z-index: 1; }
+.login-lado::after { pointer-events: none; z-index: 0; content: ""; position: absolute; right: -120px; bottom: -120px; width: 380px; height: 380px; border-radius: 50%; border: 2px solid rgba(201,165,90,.25); box-shadow: 0 0 0 26px rgba(201,165,90,.06); }
 .wordmark { display: flex; align-items: center; gap: 18px; }
 .wordmark .coisa { font-family: 'Nunito', sans-serif; letter-spacing: .32em; color: #C9A55A; font-weight: 700; font-size: .95rem; }
 .wordmark .concurseiro { font-family: 'Playfair Display', Georgia, serif; font-weight: 700; font-size: clamp(2rem, 4.2vw, 3.1rem); line-height: 1; color: #F4F1E9; }
