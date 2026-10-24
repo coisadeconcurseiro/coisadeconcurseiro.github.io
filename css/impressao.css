@@ -1,0 +1,101 @@
+/* =====================================================================
+   IMPRESSÃO DOS CADERNOS — sempre no padrão claro dos cadernos em PDF
+   (azul-marinho #1E3A5F, amarelo #F2B705), página A4.
+   ===================================================================== */
+.impressao { display: none; }
+
+@media print {
+  @page { size: A4; margin: 15mm 14mm 17mm; }
+  :root, :root[data-tema] { color-scheme: light !important; --fundo: #fff; }
+  html, body { background: #fff !important; color: #1D2433 !important; }
+  body > *:not(.impressao) { display: none !important; }
+  .impressao { display: block !important; }
+}
+
+.impressao {
+  --pr-azul: #1E3A5F; --pr-amarelo: #F2B705; --pr-ouro: #9A6700; --pr-texto: #1D2433;
+  --pr-verde: #166534; --pr-verde-bg: #E8F7EE; --pr-verm: #B91C1C; --pr-roxo: #6D28D9; --pr-cinza: #475569; --pr-borda: #D6DDE8;
+  font-family: 'Nunito', Arial, sans-serif; color: var(--pr-texto); font-size: 10.4pt; line-height: 1.42;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.impressao h1, .impressao h2, .impressao h3 { font-family: 'Fredoka', 'Nunito', sans-serif; color: var(--pr-azul); }
+
+/* capa */
+.pr-capa { min-height: 255mm; display: flex; flex-direction: column; justify-content: center; break-after: page; page-break-after: always; position: relative; }
+.pr-capa .pr-marca { display: flex; align-items: center; gap: 14px; position: absolute; top: 0; left: 0; }
+.pr-capa .pr-marca img { width: 58px; height: 58px; }
+.pr-capa .pr-marca .coisa { font-size: 8pt; letter-spacing: .3em; color: #A8822C; font-weight: 800; display: block; }
+.pr-capa .pr-marca .concurseiro { font-family: 'Playfair Display', Georgia, serif; font-weight: 700; font-size: 17pt; color: #0E2449; display: block; line-height: 1; }
+.pr-capa h1 { font-size: 26pt; margin: 0 0 6px; }
+.pr-capa .pr-sub { font-size: 13pt; color: var(--pr-cinza); margin-bottom: 22px; }
+.pr-capa .pr-nome { font-family: 'Fredoka', sans-serif; font-size: 20pt; color: var(--pr-texto); margin: 0 0 18px; border-left: 6px solid var(--pr-amarelo); padding-left: 12px; }
+.pr-caixa { border: 1.5px solid var(--pr-amarelo); background: #FFFBEF; border-radius: 12px; padding: 16px 20px; font-size: 10.5pt; }
+.pr-caixa p { margin: 0 0 8px; }
+.pr-caixa p:last-child { margin: 0; }
+.pr-caixa b { color: var(--pr-azul); }
+.pr-capa .pr-rodape { position: absolute; bottom: 0; left: 0; right: 0; font-size: 8pt; color: var(--pr-cinza); text-align: center; }
+
+/* sumário */
+.pr-sumario { break-after: page; page-break-after: always; }
+.pr-sumario h2 { font-size: 15pt; margin: 0 0 10px; }
+.pr-sumario table { width: 100%; border-collapse: collapse; font-size: 9.6pt; }
+.pr-sumario td { border-bottom: 1px solid var(--pr-borda); padding: 6px 6px; vertical-align: top; }
+.pr-sumario td.n { color: #B7791F; font-weight: 800; width: 2.2em; }
+.pr-sumario td.q { text-align: right; color: var(--pr-cinza); white-space: nowrap; width: 9em; border-left: 1px solid var(--pr-borda); }
+.pr-sumario tr.mat td { font-family: 'Fredoka', sans-serif; color: var(--pr-azul); font-weight: 600; font-size: 11pt; padding-top: 12px; border-bottom: 2px solid var(--pr-azul); }
+
+/* faixas de matéria e tópico */
+.pr-materia { font-family: 'Fredoka', sans-serif; font-size: 14pt; color: var(--pr-azul); border-bottom: 2.5px solid var(--pr-amarelo); padding-bottom: 4px; margin: 0 0 10px; break-after: avoid; page-break-after: avoid; }
+.pr-topico { background: var(--pr-azul); color: #fff; border-radius: 8px; padding: 8px 14px; font-weight: 800; font-size: 11pt; margin: 14px 0 10px; break-after: avoid; page-break-after: avoid; }
+.pr-topico span { color: var(--pr-amarelo); margin-right: 6px; }
+.pr-bloco-topico { break-inside: auto; }
+
+/* questão */
+.pr-q { border: 1px solid var(--pr-borda); border-radius: 8px; padding: 10px 14px 12px; margin: 0 0 10px; break-inside: avoid; page-break-inside: avoid; }
+.pr-q-cab { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 4px; }
+.pr-q-cab b { color: var(--pr-azul); font-size: 11pt; }
+.pr-tag { border: 1px solid var(--pr-amarelo); color: var(--pr-ouro); border-radius: 99px; padding: 1px 9px; font-size: 7.6pt; text-align: right; }
+.pr-tag.ined { border-color: #A78BFA; color: var(--pr-roxo); }
+.pr-q p { margin: 0 0 4px; }
+.pr-itens { margin: 4px 0 6px 6px; }
+.pr-item { display: grid; grid-template-columns: 2.2em 1fr; }
+.pr-item b { color: var(--pr-azul); }
+.pr-alts { margin: 4px 0 0; }
+.pr-alt { display: grid; grid-template-columns: 1.7em 1fr; padding: 2px 4px; border-radius: 4px; }
+.pr-alt b { color: var(--pr-azul); }
+.pr-alt.certa { background: var(--pr-verde-bg); }
+.pr-gab { color: var(--pr-verde); font-weight: 800; margin: 8px 0 4px; padding-bottom: 6px; border-bottom: 1px dashed #CBD5E1; }
+.pr-analise { background: #F8FAFC; border-radius: 6px; padding: 6px 8px; font-size: 9.6pt; margin: 6px 0; }
+.pr-analise .t { font-weight: 800; }
+.pr-analise > div:not(.t) { display: grid; grid-template-columns: 2.4em 1fr; }
+.pr-com { display: grid; grid-template-columns: 1.7em 1fr; margin-top: 4px; }
+.pr-com > b.c { color: var(--pr-verde); }
+.pr-com > b.e { color: var(--pr-verm); }
+.pr-com .ref { color: var(--pr-ouro); font-weight: 800; font-size: 9pt; }
+
+/* folha de respostas e gabarito */
+.pr-folha { break-before: page; page-break-before: always; }
+.pr-folha h2, .pr-gabarito h2 { font-size: 15pt; margin: 0 0 4px; }
+.pr-folha .pr-instr { color: var(--pr-cinza); font-size: 9pt; margin-bottom: 10px; }
+.pr-folha-grade { columns: 4; column-gap: 14px; }
+.pr-linha-folha { display: flex; align-items: center; gap: 4px; padding: 3px 0; break-inside: avoid; font-size: 9.5pt; }
+.pr-linha-folha b { width: 2.2em; text-align: right; color: var(--pr-azul); margin-right: 4px; }
+.pr-bolha { width: 15px; height: 15px; border: 1.3px solid var(--pr-azul); border-radius: 50%; display: inline-grid; place-items: center; font-size: 7pt; color: var(--pr-azul); font-weight: 800; }
+.pr-gabarito { break-before: page; page-break-before: always; }
+.pr-gab-grade { display: grid; grid-template-columns: repeat(8, 1fr); gap: 0; border-top: 1px solid var(--pr-borda); border-left: 1px solid var(--pr-borda); margin-top: 10px; }
+.pr-gab-grade div { border-right: 1px solid var(--pr-borda); border-bottom: 1px solid var(--pr-borda); padding: 4px 6px; display: flex; justify-content: space-between; font-size: 9.5pt; break-inside: avoid; }
+.pr-gab-grade div b { color: var(--pr-azul); }
+.pr-gab-grade div span { color: var(--pr-verde); font-weight: 800; }
+
+/* pré-visualização na tela (antes de imprimir) */
+@media screen {
+  .impressao.previa { display: block; position: fixed; inset: 0; z-index: 70; overflow: auto; background: #E7EBF1; padding: 74px 12px 40px; }
+  .impressao.previa .pr-folha-pagina { background: #fff; max-width: 210mm; margin: 0 auto 18px; padding: 15mm 14mm; box-shadow: 0 6px 22px rgba(0,0,0,.18); }
+  .impressao.previa .pr-capa { min-height: 240mm; }
+  .barra-previa { position: fixed; top: 0; left: 0; right: 0; z-index: 71; background: #0E2449; color: #fff; display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 14px; flex-wrap: wrap; font-family: 'Nunito', sans-serif; }
+  .barra-previa b { font-family: 'Fredoka', sans-serif; font-weight: 600; }
+}
+@media print {
+  .barra-previa { display: none !important; }
+  .impressao .pr-folha-pagina { padding: 0; box-shadow: none; max-width: none; margin: 0; }
+}

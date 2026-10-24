@@ -1,0 +1,150 @@
+rules_version = '2';
+
+// =====================================================================
+// Regras de segurança — Coisa de Concurseiro · Questões
+// Cole este texto inteiro em: Firebase › Firestore Database › Regras › Publicar.
+//
+// O que estas regras garantem:
+//  • Cada pessoa só lê e grava os próprios dados (progresso, cadernos, simulados).
+//  • Nome de usuário único (coleção "usernames"), que não pode ser trocado por outra pessoa.
+//  • O ranking de cada usuário PRECISA bater com o registro de primeiras tentativas
+//    dele (pc = acertou de primeira, pe = errou de primeira): pontos = tamanho de pc.
+//  • Esse registro só cresce: não dá para apagar nem trocar uma primeira tentativa
+//    (zerar o histórico não devolve pontos), e uma questão não pode estar em pc e pe.
+//  • No máximo 60 primeiras tentativas novas por gravação e uma gravação do progresso
+//    a cada 2 segundos, por usuário.
+//  • Ninguém altera o ranking, o progresso ou os cadernos de outra pessoa.
+// Limite (explicado no guia): o gabarito está no próprio site, então quem souber
+// programar pode registrar "acertei" de propósito. O teto é 1 ponto por questão.
+// =====================================================================
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function logado() { return request.auth != null; }
+    function dono(uid) { return logado() && request.auth.uid == uid; }
+    function mats() { return ['DTRAB', 'PTRAB', 'DCIV', 'PCIV', 'DADM', 'DCONST']; }
+    function caminhoUser(uid) { return /databases/$(database)/documents/users/$(uid); }
+    function mapasVazios() { return {'DTRAB': {}, 'PTRAB': {}, 'DCIV': {}, 'PCIV': {}, 'DADM': {}, 'DCONST': {}}; }
+    function listasVazias() { return {'DTRAB': [], 'PTRAB': [], 'DCIV': [], 'PCIV': [], 'DADM': [], 'DCONST': []}; }
+    function camposUser() { return ['username', 'criadoEm', 'r', 'dias', 'pc', 'pe', 'ciclo', 'em', 'zeradoEm']; }
+
+    // ---------------------------------------------------------------- nomes de usuário
+    match /usernames/{nome} {
+      allow get: if true;            // necessário para verificar se o nome está livre
+      allow list: if false;          // ninguém lista todos os nomes
+      allow create: if logado()
+        && request.resource.data.keys().hasOnly(['uid'])
+        && request.resource.data.uid == request.auth.uid
+        && nome.matches('^[a-z0-9_.]{3,20}$')
+        && getAfter(caminhoUser(request.auth.uid)).data.username.lower() == nome;
+      allow update: if false;
+      allow delete: if logado() && resource.data.uid == request.auth.uid;
+    }
+
+    // ---------------------------------------------------------------- perfil + progresso
+    function criacaoUserOk(d) {
+      return d.keys().hasOnly(camposUser())
+        && d.username is string
+        && d.username.matches('^[A-Za-z0-9_.]{3,20}$')
+        && d.criadoEm == request.time
+        && d.em == request.time
+        && d.r == {} && d.dias == {}
+        && d.pc == mapasVazios() && d.pe == mapasVazios()
+        && d.ciclo == listasVazias()
+        && d.zeradoEm == null
+        && getAfter(/databases/$(database)/documents/usernames/$(d.username.lower())).data.uid == request.auth.uid;
+    }
+    function soAcrescenta(antes, depois) {
+      return depois.diff(antes).removedKeys().size() == 0
+        && depois.diff(antes).changedKeys().size() == 0;
+    }
+    function materiaOk(a, d, m) {
+      return d.pc[m] is map && d.pe[m] is map
+        && soAcrescenta(a.pc[m], d.pc[m])
+        && soAcrescenta(a.pe[m], d.pe[m])
+        && d.pc[m].keys().toSet().intersection(d.pe[m].keys().toSet()).size() == 0;
+    }
+    function novas(a, d, m) {
+      return (d.pc[m].size() - a.pc[m].size()) + (d.pe[m].size() - a.pe[m].size());
+    }
+    function atualizacaoUserOk(a, d) {
+      return d.keys().hasOnly(camposUser())
+        && d.username == a.username
+        && d.criadoEm == a.criadoEm
+        && d.em == request.time
+        && request.time > a.em + duration.value(2, 's')
+        && (d.zeradoEm == a.zeradoEm || d.zeradoEm == request.time)
+        && d.r is map && d.dias is map && d.ciclo is map
+        && d.pc.keys().hasOnly(mats()) && d.pe.keys().hasOnly(mats())
+        && d.pc.keys().hasAll(mats()) && d.pe.keys().hasAll(mats())
+        && materiaOk(a, d, 'DTRAB') && materiaOk(a, d, 'PTRAB') && materiaOk(a, d, 'DCIV')
+        && materiaOk(a, d, 'PCIV') && materiaOk(a, d, 'DADM') && materiaOk(a, d, 'DCONST')
+        && novas(a, d, 'DTRAB') + novas(a, d, 'PTRAB') + novas(a, d, 'DCIV')
+           + novas(a, d, 'PCIV') + novas(a, d, 'DADM') + novas(a, d, 'DCONST') <= 60;
+    }
+
+    match /users/{uid} {
+      allow read: if dono(uid);
+      allow create: if dono(uid) && criacaoUserOk(request.resource.data);
+      allow update: if dono(uid) && atualizacaoUserOk(resource.data, request.resource.data);
+      allow delete: if dono(uid);
+
+      // ------------------------------------------------------------ cadernos
+      function cadernoOk(d) {
+        return d.keys().hasOnly(['nome', 'qids', 'ordem', 'criadoEm', 'atualizadoEm'])
+          && d.nome is string && d.nome.size() > 0 && d.nome.size() <= 80
+          && d.qids is list && d.qids.size() <= 500
+          && d.ordem in ['banco', 'aleatoria']
+          && d.atualizadoEm == request.time;
+      }
+      match /cadernos/{cid} {
+        allow read, delete: if dono(uid);
+        allow create: if dono(uid) && cadernoOk(request.resource.data) && request.resource.data.criadoEm == request.time;
+        allow update: if dono(uid) && cadernoOk(request.resource.data) && request.resource.data.criadoEm == resource.data.criadoEm;
+      }
+
+      // ------------------------------------------------------------ simulados
+      function simuladoOk(d) {
+        return d.keys().hasOnly(['data', 'acertos', 'total', 'tempo', 'porMateria', 'qids', 'resp', 'criadoEm'])
+          && d.total == 40
+          && d.qids is list && d.qids.size() == 40
+          && d.resp is list && d.resp.size() == 40
+          && d.acertos is int && d.acertos >= 0 && d.acertos <= 40
+          && d.tempo is number && d.data is number && d.porMateria is map
+          && d.criadoEm == request.time;
+      }
+      match /simulados/{sid} {
+        allow read, delete: if dono(uid);
+        allow create: if dono(uid) && simuladoOk(request.resource.data);
+        allow update: if false;
+      }
+    }
+
+    // ---------------------------------------------------------------- ranking (leitura para quem está logado)
+    function contaOk(d, u, m) {
+      return d.pts[m] == u.pc[m].size()
+        && d.resp[m] == u.pc[m].size() + u.pe[m].size();
+    }
+    function rankingOk(d) {
+      let u = getAfter(caminhoUser(request.auth.uid)).data;
+      return d.keys().hasOnly(['u', 'pts', 'resp', 'total', 'totalResp', 'em'])
+        && d.u == u.username
+        && d.em == request.time
+        && d.pts.keys().hasOnly(mats()) && d.resp.keys().hasOnly(mats())
+        && contaOk(d, u, 'DTRAB') && contaOk(d, u, 'PTRAB') && contaOk(d, u, 'DCIV')
+        && contaOk(d, u, 'PCIV') && contaOk(d, u, 'DADM') && contaOk(d, u, 'DCONST')
+        && d.total == d.pts.DTRAB + d.pts.PTRAB + d.pts.DCIV + d.pts.PCIV + d.pts.DADM + d.pts.DCONST
+        && d.totalResp == d.resp.DTRAB + d.resp.PTRAB + d.resp.DCIV + d.resp.PCIV + d.resp.DADM + d.resp.DCONST;
+    }
+    match /ranking/{uid} {
+      allow read: if logado();
+      allow create, update: if dono(uid) && rankingOk(request.resource.data);
+      allow delete: if dono(uid);
+    }
+
+    // qualquer outro caminho: bloqueado
+    match /{caminho=**} {
+      allow read, write: if false;
+    }
+  }
+}

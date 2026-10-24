@@ -1,0 +1,3 @@
+Firebase JavaScript SDK 12.19.0 — Copyright Google LLC
+Licenciado sob a Apache License, Version 2.0: https://www.apache.org/licenses/LICENSE-2.0
+Arquivos copiados sem alteração do pacote npm "firebase", exceto o endereço de importação do firebase-app.js (trocado para o arquivo local).

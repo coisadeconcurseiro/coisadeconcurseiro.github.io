@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-BR" data-tema="escuro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Coisa de Concurseiro · Questões TRT-8</title>
+<meta name="description" content="Banco gratuito de questões comentadas para o TRT-8 2026 (FCC), Analista Judiciário – Área Judiciária. Projeto Estude Comigo para TRT.">
+<meta name="theme-color" content="#0E2449">
+<link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32.png">
+<link rel="icon" type="image/png" sizes="64x64" href="img/favicon-64.png">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Fredoka:wght@400;500;600;700&family=Nunito:ital,wght@0,400;0,600;0,700;0,800;1,400&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/estilo.css">
+<link rel="stylesheet" href="css/impressao.css">
+<script>
+  try { var t = localStorage.getItem('cdc_tema'); if (t) document.documentElement.setAttribute('data-tema', t); } catch (e) {}
+</script>
+</head>
+<body>
+  <div id="carregando" class="carregando">
+    <img src="img/logo-192.png" alt="" width="96" height="96">
+    <p>Carregando o banco de questões…</p>
+  </div>
+
+  <!-- TELA DE ENTRADA -->
+  <section id="tela-login" class="tela-login" hidden></section>
+
+  <!-- APLICATIVO -->
+  <div id="layout" class="layout" hidden>
+    <header class="topo-mobile">
+      <button class="btn-icone" id="abrir-menu" aria-label="Abrir menu">
+        <svg viewBox="0 0 24 24" width="26" height="26"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+      </button>
+      <a href="#/questoes" class="marca-mini"><img src="img/favicon-64.png" alt="" width="34" height="34"><span>Coisa de <b>Concurseiro</b></span></a>
+      <span></span>
+    </header>
+    <div class="veu" id="veu"></div>
+    <aside class="menu" id="menu" aria-label="Menu principal"></aside>
+    <main class="conteudo" id="conteudo" tabindex="-1"></main>
+  </div>
+
+  <div id="modal-raiz"></div>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <!-- área usada só na impressão dos cadernos -->
+  <div id="impressao" class="impressao" aria-hidden="true"></div>
+
+  <script src="js/config.js"></script>
+  <script src="dados/questoes.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
