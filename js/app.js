@@ -1252,6 +1252,37 @@ function telaEscolherNome() {
   };
 }
 
+/* ------------------------------------------------------------------ mostrar/ocultar senha (olho) */
+(function () {
+  const st = document.createElement('style');
+  st.textContent = `.senha-wrap{position:relative;display:block}
+.senha-wrap input{padding-right:52px!important}
+.olho{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:40px;height:40px;border:0;background:none;color:var(--texto2);border-radius:10px;cursor:pointer;display:grid;place-items:center;padding:0}
+.olho:hover{color:var(--ouro);background:rgba(255,255,255,.06)}`;
+  document.head.appendChild(st);
+  const ABERTO = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const FECHADO = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.6 10.6 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.6 6.6C3.9 8.4 2 12 2 12s3.6 7 10 7c1.7 0 3.2-.5 4.5-1.2"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
+  function equipar(raiz) {
+    raiz.querySelectorAll('input[type=password]:not([data-olho])').forEach(inp => {
+      inp.dataset.olho = '1';
+      const w = document.createElement('span'); w.className = 'senha-wrap';
+      inp.parentNode.insertBefore(w, inp); w.appendChild(inp);
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'olho';
+      b.setAttribute('aria-label', 'Mostrar senha'); b.title = 'Mostrar senha'; b.innerHTML = ABERTO;
+      b.addEventListener('click', () => {
+        const ver = inp.type === 'password';
+        inp.type = ver ? 'text' : 'password';
+        b.innerHTML = ver ? FECHADO : ABERTO;
+        const r = ver ? 'Ocultar senha' : 'Mostrar senha'; b.setAttribute('aria-label', r); b.title = r;
+        inp.focus();
+      });
+      w.appendChild(b);
+    });
+  }
+  new MutationObserver(() => equipar(document)).observe(document.body, { childList: true, subtree: true });
+  equipar(document);
+})();
+
 /* ================================================================== INÍCIO */
 async function entrarNoApp() {
   S.doc = await S.backend.carregarDoc();
