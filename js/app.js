@@ -403,6 +403,7 @@ async function render() {
   desenharMenu();
   fecharMenuMobile();
   const c = $('#conteudo');
+  gaPagina('/' + rota);
   const telas = { questoes: telaQuestoes, simulados: telaSimulados, cadernos: telaCadernos, 'raio-x': telaRaioX, ranking: telaRanking, conta: telaConta, contato: telaContato, admin: telaAdmin };
   const mob = $('.topo-mobile > span:last-child'); if (mob) { mob.setAttribute('data-online', ''); mob.innerHTML = pilulaOnline(); }
   const f = telas[rota] || telaQuestoes;
@@ -593,6 +594,7 @@ async function finalizarSimulado() {
   });
   registrarRespostas(s.qids.filter(id => s.resp[id] != null).map(id => ({ id, alt: s.resp[id] })));
   const dados = { data: Date.now(), acertos, total: SIM_TOTAL, tempo, porMateria, qids: s.qids, resp: s.qids.map(id => s.resp[id] ?? -1) };
+  gaEvento('simulado_concluido', { acertos });
   try {
     const sid = await S.backend.salvarSimulado(dados);
     S.simulados = null;
@@ -951,7 +953,9 @@ function telaConta(c) {
         <a class="btn btn-ouro" href="${SITE.canal}" target="_blank" rel="noopener">${IC.yt} Abrir o canal no YouTube</a></section>
     </div>
     <section class="cartao" style="margin-top:16px"><h2>Privacidade</h2>
-      <p class="texto2">Seu e-mail e sua senha servem só para o login e ficam com o Firebase Authentication (Google). A senha nunca é guardada pelo site. Suas respostas são usadas só para as suas estatísticas. Os outros usuários veem apenas o seu nome de usuário e a sua pontuação no ranking.</p></section>
+      <p class="texto2">Seu e-mail e sua senha servem só para o login e ficam com o Firebase Authentication (Google). A senha nunca é guardada pelo site. Suas respostas são usadas só para as suas estatísticas. Os outros usuários veem apenas o seu nome de usuário e a sua pontuação no ranking.</p>
+      ${gaId() ? `<p class="texto2">Se você aceitar, o site também usa cookies do Google Analytics para contar visitas de forma anônima (páginas vistas, tipo de aparelho, cidade aproximada e de onde você veio). Nenhum e-mail, nome ou resposta é enviado ao Analytics.</p>
+      <div class="botoes"><span class="pequeno">Cookies de estatística: <b>${consentimento() === 'sim' ? 'aceitos' : 'recusados'}</b></span><button class="btn btn-peq" data-acao="cookies-mudar">${consentimento() === 'sim' ? 'Recusar' : 'Aceitar'}</button></div>` : ''}</section>
     <section class="cartao" style="margin-top:16px"><h2>Zona de cuidado</h2>
       <div class="botoes"><button class="btn btn-perigo" data-acao="zerar">Zerar histórico</button><button class="btn btn-perigo" data-acao="excluir-conta">Excluir minha conta</button></div>
       <p class="texto2 pequeno" style="margin-bottom:0">Zerar histórico apaga o Raio-X, os simulados e a situação das questões (os cadernos e os pontos do ranking ficam). Excluir a conta apaga tudo, inclusive os cadernos e a sua posição no ranking.</p></section>
@@ -992,6 +996,7 @@ const ACOES = {
     const ok = alt === Q[id].g;
     p.resp[id] = { alt, ok };
     registrarRespostas([{ id, alt }]);
+    gaEvento('questao_respondida', { materia: Q[id].m, acertou: ok ? 'sim' : 'nao' });
     telaResolver($('#conteudo'));
     $('.resultado')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   },
@@ -1168,6 +1173,7 @@ function msgErro(e) { return ERROS[e?.code] || ERROS[e?.message] || 'Algo deu er
 const RE_USER = /^[A-Za-z0-9_.]{3,20}$/;
 
 function telaLogin(aba = 'entrar') {
+  gaPagina('/entrar');
   const t = $('#tela-login');
   t.hidden = false; $('#layout').hidden = true;
   t.innerHTML = `
@@ -1189,7 +1195,7 @@ function telaLogin(aba = 'entrar') {
         <button class="${aba === 'entrar' ? 'ativa' : ''}" data-aba="entrar" role="tab">Entrar</button>
         <button class="${aba === 'criar' ? 'ativa' : ''}" data-aba="criar" role="tab">Criar conta</button></div>
       <form id="form-login" novalidate>${formLogin(aba)}</form>
-      <div class="privacidade"><span>🔒</span><span>Seus dados são usados só para o login e para as suas estatísticas. No ranking aparece apenas o seu nome de usuário; o e-mail nunca é mostrado.</span></div>
+      <div class="privacidade"><span>🔒</span><span>Seus dados são usados só para o login e para as suas estatísticas. No ranking aparece apenas o seu nome de usuário; o e-mail nunca é mostrado.${gaId() ? ' Com a sua permissão, o site conta visitas de forma anônima pelo Google Analytics.' : ''}</span></div>
     </div></div>`;
   t.querySelectorAll('[data-aba]').forEach(b => b.onclick = () => telaLogin(b.dataset.aba));
   t.querySelector('[data-esqueci]')?.addEventListener('click', e => { e.preventDefault(); telaLogin('esqueci'); });
@@ -1233,6 +1239,7 @@ async function enviarLogin(e, aba) {
       if (f.elements.senha.value !== f.elements.senha2.value) throw { code: 'x', msg: 'As senhas não são iguais.' };
       if (!await S.backend.nomeDisponivel(username)) throw { code: 'nome-em-uso' };
       await S.backend.cadastrar({ username, email: v('email'), senha: f.elements.senha.value });
+      gaEvento('sign_up', { method: 'email' });
     } else if (aba === 'esqueci') {
       if (!v('email')) throw { code: 'auth/missing-email' };
       await S.backend.redefinirSenha(v('email'));
@@ -1241,6 +1248,7 @@ async function enviarLogin(e, aba) {
     } else {
       if (!v('email') || !f.elements.senha.value) throw { code: 'x', msg: 'Preencha e-mail e senha.' };
       await S.backend.entrar(v('email'), f.elements.senha.value);
+      gaEvento('login', { method: 'email' });
     }
   } catch (err) {
     console.warn(err);
@@ -1579,6 +1587,62 @@ textarea:focus{border-color:var(--ouro2);outline:none}
 `;
   document.head.appendChild(st);
 })();
+
+/* ================================================================== GOOGLE ANALYTICS (com consentimento) */
+function gaId() { return window.GA_ID || (window.FIREBASE_CONFIG || {}).measurementId || ''; }
+function consentimento() { try { return localStorage.getItem('cdc_cookies') || ''; } catch (e) { return ''; } }
+function salvarConsentimento(v) { try { localStorage.setItem('cdc_cookies', v); } catch (e) { } }
+let gaPronto = false, gaUltima = '';
+function carregarGA() {
+  const id = gaId();
+  if (!id || gaPronto || consentimento() !== 'sim') return;
+  gaPronto = true;
+  window.dataLayer = window.dataLayer || [];
+  window.gtag = function () { window.dataLayer.push(arguments); };
+  window.gtag('js', new Date());
+  window.gtag('config', id, { send_page_view: false, allow_google_signals: false, allow_ad_personalization_signals: false });
+  const sc = document.createElement('script'); sc.async = true; sc.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(id);
+  document.head.appendChild(sc);
+  if (gaUltima) { const p = gaUltima; gaUltima = ''; gaPagina(p); }
+}
+function gaPagina(caminho) {
+  if (!gaPronto) { gaUltima = caminho; return; }
+  if (caminho === gaUltima) return;
+  gaUltima = caminho;
+  const titulos = { '/entrar': 'Entrar', '/questoes': 'Questões', '/simulados': 'Simulados', '/cadernos': 'Meus cadernos', '/raio-x': 'Raio-X', '/ranking': 'Ranking', '/contato': 'Fale comigo', '/conta': 'Minha conta', '/admin': 'Administrador' };
+  window.gtag('event', 'page_view', { page_location: location.origin + '/' + caminho.replace(/^\//, ''), page_path: caminho, page_title: titulos[caminho] || 'Coisa de Concurseiro' });
+}
+function gaEvento(nome, params = {}) { if (gaPronto) window.gtag('event', nome, params); }
+function avisoCookies() {
+  if (!gaId() || consentimento() || $('#aviso-cookies')) return;
+  const d = document.createElement('div'); d.id = 'aviso-cookies';
+  d.innerHTML = `<div class="ck-txt"><b>🍪 Cookies de estatística</b><span>Com a sua permissão, o site usa o Google Analytics para contar visitas de forma anônima e melhorar o projeto. Nenhum e-mail, nome ou resposta é enviado. Você pode mudar isso em Minha conta.</span></div>
+    <div class="ck-bt"><button class="btn btn-peq" data-ck="nao">Recusar</button><button class="btn btn-ouro btn-peq" data-ck="sim">Aceitar</button></div>`;
+  document.body.appendChild(d);
+  d.addEventListener('click', e => {
+    const b = e.target.closest('[data-ck]'); if (!b) return;
+    salvarConsentimento(b.dataset.ck); d.remove();
+    if (b.dataset.ck === 'sim') carregarGA();
+  });
+}
+ACOES['cookies-mudar'] = () => {
+  const novo = consentimento() === 'sim' ? 'nao' : 'sim';
+  salvarConsentimento(novo);
+  if (novo === 'nao') { toast('Cookies de estatística recusados. A página será recarregada.'); setTimeout(() => location.reload(), 1200); }
+  else { carregarGA(); toast('Cookies de estatística aceitos. Obrigado!'); render(); }
+};
+(function () {
+  const st = document.createElement('style');
+  st.textContent = `#aviso-cookies{position:fixed;left:16px;right:16px;bottom:16px;z-index:90;max-width:760px;margin:0 auto;background:var(--cartao,#13294D);color:var(--texto,#EEF2F8);border:2px solid var(--ouro2,#C9A55A);border-radius:18px;padding:14px 16px;display:flex;gap:14px;align-items:center;box-shadow:0 14px 40px rgba(0,0,0,.45);font-family:'Nunito',sans-serif}
+#aviso-cookies .ck-txt{display:grid;gap:3px;font-size:.9rem;line-height:1.4}
+#aviso-cookies .ck-txt span{color:var(--texto2,#B8C5DA)}
+#aviso-cookies .ck-bt{display:flex;gap:8px;flex:none}
+@media (max-width:600px){#aviso-cookies{flex-direction:column;align-items:stretch}#aviso-cookies .ck-bt .btn{flex:1}}
+@media print{#aviso-cookies{display:none!important}}`;
+  document.head.appendChild(st);
+})();
+carregarGA();
+setTimeout(avisoCookies, 600);
 
 /* ------------------------------------------------------------------ mostrar/ocultar senha (olho) */
 (function () {

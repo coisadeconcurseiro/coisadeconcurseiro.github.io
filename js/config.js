@@ -15,7 +15,8 @@ window.FIREBASE_CONFIG = {
   projectId: "coisa-de-concurseiro-questoes",
   storageBucket: "coisa-de-concurseiro-questoes.firebasestorage.app",
   messagingSenderId: "305817193192",
-  appId: "1:305817193192:web:2b925f6e5297b83681d75d"
+  appId: "1:305817193192:web:2b925f6e5297b83681d75d",
+  measurementId: "G-4K7FN5DTPB"
 };
 
 /* Código (UID) da conta de administrador. Só essa conta vê a aba "Administrador".
