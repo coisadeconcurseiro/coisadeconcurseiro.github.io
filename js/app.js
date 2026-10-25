@@ -103,6 +103,8 @@ const IC = {
   raiox: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
   ranking: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M8 21V11H3v10zM15 21V5h-6v16zM21 21v-7h-6v7z"/></svg>',
   conta: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>',
+  contato: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/></svg>',
+  admin: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z"/><path d="M9 12l2 2 4-4"/></svg>',
   yt: '<svg viewBox="0 0 24 24" width="20" height="20"><rect x="2" y="5" width="20" height="14" rx="4" fill="currentColor"/><path d="M10 9v6l5-3z" fill="#0E2449"/></svg>',
   sol: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/></svg>',
   lua: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>'
@@ -347,21 +349,37 @@ function questaoHTML(q, { num, total, marcada = null, respondida = false, modo =
     ${alts}
     ${respondida && modo !== 'simulado' ? `<div class="resultado ${ok ? 'ok' : 'nok'}"><span class="ic"><span>${ok ? '✓' : '✗'}</span></span>${ok ? 'Você acertou!' : (marcada == null ? `Sem resposta. Gabarito: ${LETRAS[q.g]}` : `Você errou. Gabarito: ${LETRAS[q.g]}`)}</div>` : ''}
     ${respondida ? correcaoHTML(q, marcada) : ''}
+    ${modo !== 'simulado' ? `<div class="q-erro"><button type="button" class="btn btn-texto btn-peq" data-acao="avisar-erro" data-id="${q.id}">⚑ Avisar erro nesta questão</button></div>` : ''}
   </article>`;
 }
 
 /* ------------------------------------------------------------------ menu */
 const ROTAS = [
   ['questoes', 'Questões', IC.questoes], ['simulados', 'Simulados', IC.simulados], ['cadernos', 'Meus cadernos', IC.cadernos],
-  ['raio-x', 'Raio-X', IC.raiox], ['ranking', 'Ranking', IC.ranking], ['conta', 'Minha conta', IC.conta]
+  ['raio-x', 'Raio-X', IC.raiox], ['ranking', 'Ranking', IC.ranking], ['contato', 'Fale comigo', IC.contato], ['conta', 'Minha conta', IC.conta]
 ];
+const ehAdmin = () => !!(S.user && window.ADMIN_UID && S.user.uid === window.ADMIN_UID);
+function rotas() { return ehAdmin() ? [...ROTAS, ['admin', 'Administrador', IC.admin]] : ROTAS; }
+function seloMenu(r) {
+  if (r === 'contato' && S.respostasNovas) return `<span class="selo-menu">${S.respostasNovas}</span>`;
+  if (r === 'admin' && S.naoLidas) return `<span class="selo-menu">${S.naoLidas}</span>`;
+  return '';
+}
+function pilulaOnline() {
+  if (S.online == null) return '';
+  return `<span class="online-agora" title="Pessoas com o site aberto nos últimos 3 minutos"><i></i><b>${num(S.online)}</b> ${S.online === 1 ? 'estudando agora' : 'estudando agora'}</span>`;
+}
+function atualizarOnlineNaTela() {
+  $$('[data-online]').forEach(el => { el.innerHTML = pilulaOnline(); });
+}
 function desenharMenu() {
   const atual = (location.hash.split('/')[1] || 'questoes');
   $('#menu').innerHTML = `
     <a class="logo" href="#/questoes"><img src="img/logo-192.png" alt="Logotipo Coisa de Concurseiro">
       <span><span class="coisa">COISA DE</span><span class="concurseiro">Concurseiro</span><span class="sub">Questões · TRT-8 2026 · FCC</span></span></a>
-    <nav>${ROTAS.map(([r, t, ic]) => `<a href="#/${r}" class="${atual === r ? 'ativo' : ''}">${ic}<span>${t}</span></a>`).join('')}</nav>
+    <nav>${rotas().map(([r, t, ic]) => `<a href="#/${r}" class="${atual === r ? 'ativo' : ''}">${ic}<span>${t}</span>${seloMenu(r)}</a>`).join('')}</nav>
     <div class="menu-rodape">
+      <div data-online>${pilulaOnline()}</div>
       <div class="usuario"><span class="avatar">${iniciais(S.doc?.username)}</span><div style="min-width:0"><b>${esc(S.doc?.username || '')}</b><span>${S.backend?.modo === 'demo' ? 'modo demonstração' : 'conectado'}</span></div></div>
       <button class="btn-tema" data-acao="tema">${tema() === 'escuro' ? IC.sol + ' Tema claro' : IC.lua + ' Tema escuro'}</button>
       <a class="btn-canal" href="${SITE.canal}" target="_blank" rel="noopener">${IC.yt} Assista às aulas no canal</a>
@@ -385,7 +403,8 @@ async function render() {
   desenharMenu();
   fecharMenuMobile();
   const c = $('#conteudo');
-  const telas = { questoes: telaQuestoes, simulados: telaSimulados, cadernos: telaCadernos, 'raio-x': telaRaioX, ranking: telaRanking, conta: telaConta };
+  const telas = { questoes: telaQuestoes, simulados: telaSimulados, cadernos: telaCadernos, 'raio-x': telaRaioX, ranking: telaRanking, conta: telaConta, contato: telaContato, admin: telaAdmin };
+  const mob = $('.topo-mobile > span:last-child'); if (mob) { mob.setAttribute('data-online', ''); mob.innerHTML = pilulaOnline(); }
   const f = telas[rota] || telaQuestoes;
   try { await f(c, partes.slice(1)); }
   catch (e) { console.error(e); c.innerHTML = `<div class="cartao"><h2>Algo deu errado</h2><p>${esc(e.message || e)}</p><button class="btn" onclick="location.reload()">Recarregar</button></div>`; }
@@ -889,7 +908,7 @@ async function telaRaioX(c) {
 function ordenarRanking(lista, m) {
   const p = r => m ? (r.pts?.[m] || 0) : (r.total || 0);
   const t = r => m ? (r.resp?.[m] || 0) : (r.totalResp || 0);
-  return lista.filter(r => t(r) > 0).sort((a, b) =>
+  return lista.filter(r => t(r) > 0 && r.uid !== window.ADMIN_UID).sort((a, b) =>
     p(b) - p(a) || (p(b) / t(b)) - (p(a) / t(a)) || t(b) - t(a) || (a.em || 0) - (b.em || 0)).map(r => ({ ...r, P: p(r), T: t(r) }));
 }
 async function telaRanking(c) {
@@ -1076,7 +1095,7 @@ const ACOES = {
   'rank-aba': (el) => { S.rankAba = el.dataset.v; render(); },
   'rank-atualizar': () => { S.rank = null; render(); },
   // conta
-  'sair': async () => { await gravarFila(); S.doc = null; S.pratica = null; S.cadernos = null; S.simulados = null; S.rank = null; await S.backend.sair(); location.hash = ''; },
+  'sair': async () => { pararPresenca(); await gravarFila(); S.doc = null; S.pratica = null; S.cadernos = null; S.simulados = null; S.rank = null; await S.backend.sair(); location.hash = ''; },
   'trocar-senha': async () => {
     try { await S.backend.redefinirSenha(S.user.email); toast('Enviamos um e-mail para você criar uma nova senha.'); }
     catch (e) { toast(msgErro(e), 'erro'); }
@@ -1252,6 +1271,315 @@ function telaEscolherNome() {
   };
 }
 
+/* ================================================================== PRESENÇA (online agora) */
+const PULSO_MS = 120000, CONTAGEM_MS = 60000;
+function pararPresenca() { clearInterval(S.timerPulso); clearInterval(S.timerOnline); S.timerPulso = S.timerOnline = null; }
+async function pulsar() {
+  if (!S.doc || document.visibilityState !== 'visible') return;
+  S.ultimoPulso = Date.now();
+  try { await S.backend.pulso(S.doc.username); } catch (e) { console.warn('presença', e); }
+}
+async function contarOnline() {
+  if (!S.doc || document.visibilityState !== 'visible') return;
+  try { S.online = Math.max(1, await S.backend.contarOnline()); atualizarOnlineNaTela(); } catch (e) { console.warn('online', e); }
+}
+function iniciarPresenca() {
+  pararPresenca();
+  pulsar().then(contarOnline);
+  S.timerPulso = setInterval(pulsar, PULSO_MS);
+  S.timerOnline = setInterval(contarOnline, CONTAGEM_MS);
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && S.doc) {
+    if (!S.ultimoPulso || Date.now() - S.ultimoPulso > 60000) pulsar().then(contarOnline);
+    atualizarSelos();
+  }
+});
+async function atualizarSelos() {
+  if (!S.doc) return;
+  try {
+    const minhas = await S.backend.minhasMensagens();
+    S.minhasMsgs = minhas;
+    S.respostasNovas = minhas.filter(m => m.resposta && !m.vista).length;
+    if (ehAdmin()) S.naoLidas = await S.backend.admContarNaoLidas();
+    desenharMenu();
+  } catch (e) { console.warn('selos', e); }
+}
+
+/* ================================================================== CONTA BLOQUEADA */
+function telaBloqueado() {
+  const t = $('#tela-login');
+  t.hidden = false; $('#layout').hidden = true;
+  t.innerHTML = `<div class="login-lado"><div class="wordmark"><img src="img/logo-192.png" width="80" height="80" alt=""><div><div class="coisa">COISA DE</div><div class="concurseiro">Concurseiro</div></div></div></div>
+    <div class="login-form"><div class="login-caixa"><h2>Conta bloqueada</h2>
+      <p class="texto2">Esta conta foi bloqueada pelo administrador do site e não pode mais ser usada.</p>
+      <p class="texto2 pequeno">Se você acha que foi um engano, fale com o canal <a href="${SITE.canal}" target="_blank" rel="noopener">${esc(SITE.nome)}</a> no YouTube.</p>
+      <button class="btn" style="width:100%" id="sair-bloq">Sair</button></div></div>`;
+  $('#sair-bloq').onclick = () => S.backend.sair();
+}
+
+/* ================================================================== FALE COMIGO */
+const TIPOS_MSG = { sugestao: 'Sugestão', solicitacao: 'Solicitação', problema: 'Problema no site', erro: 'Erro em questão', outro: 'Outro assunto' };
+const MAX_MSG = 1500;
+function pilulaTipo(t) {
+  const cls = { sugestao: 'p-caso', solicitacao: 'p-juris', problema: 'p-fcc-cobra', erro: 'p-errada', outro: 'p-neutra' }[t] || 'p-neutra';
+  return `<span class="pilula ${cls}">${esc(TIPOS_MSG[t] || t)}</span>`;
+}
+function rotuloQuestao(qid) {
+  const q = Q[qid]; if (!q) return esc(qid || '');
+  return `<b>${esc(qid)}</b> · ${esc(MAT[q.m].curto)} · ${q.tp}. ${esc(TOP[q.m + ':' + q.tp])}`;
+}
+async function enviarMensagem({ tipo, texto, qid }) {
+  texto = (texto || '').trim();
+  if (texto.length < 3) throw { code: 'x', msg: 'Escreva a sua mensagem.' };
+  if (texto.length > MAX_MSG) throw { code: 'x', msg: `A mensagem pode ter no máximo ${MAX_MSG} caracteres.` };
+  if (S.ultimaMsg && Date.now() - S.ultimaMsg < 20000) throw { code: 'x', msg: 'Aguarde alguns segundos antes de enviar outra mensagem.' };
+  if (qid && !Q[qid]) throw { code: 'x', msg: 'Código de questão não encontrado. Confira o código (ex.: DTRAB-001).' };
+  await S.backend.enviarMensagem({ u: S.doc.username, tipo, texto, qid: qid || null });
+  S.ultimaMsg = Date.now();
+}
+async function telaContato(c) {
+  c.innerHTML = '<div class="vazio">Carregando…</div>';
+  let minhas = [];
+  try { minhas = await S.backend.minhasMensagens(); } catch (e) { console.warn(e); }
+  minhas.sort((a, b) => (b.criadoEm || 0) - (a.criadoEm || 0));
+  S.minhasMsgs = minhas;
+  const tipoPre = S.contatoTipo || 'sugestao';
+  c.innerHTML = `${faixaDemo()}
+    <div class="cabecalho-pagina"><div><h1>Fale <span class="marca">comigo</span></h1>
+      <p>Mande sugestões, pedidos, dúvidas sobre o site ou avise um erro em alguma questão. Eu leio tudo!</p></div>
+      <span class="dica">sua ideia ajuda a melhorar o site :)</span></div>
+    <section class="cartao cartao-ouro">
+      <h2>Nova mensagem</h2>
+      <form id="form-msg">
+        <div class="grade g2" style="gap:12px 16px">
+          <label class="campo"><span>Assunto</span><select name="tipo">${Object.entries(TIPOS_MSG).map(([k, v]) => `<option value="${k}" ${k === tipoPre ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+          <label class="campo" id="campo-qid" ${tipoPre === 'erro' ? '' : 'hidden'}><span>Código da questão <span class="apagado">(aparece no canto da questão, ex.: DTRAB-001)</span></span><input type="text" name="qid" maxlength="12" placeholder="DTRAB-001" value="${esc(S.contatoQid || '')}"></label>
+        </div>
+        <label class="campo"><span>Mensagem</span><textarea name="texto" rows="5" maxlength="${MAX_MSG}" placeholder="Escreva aqui…" style="resize:vertical"></textarea></label>
+        <div class="resumo-filtro" style="margin-top:4px"><span class="apagado pequeno"><span id="cont-msg">0</span>/${MAX_MSG} · o administrador vê só o seu nome de usuário e a mensagem.</span>
+          <button class="btn btn-ouro" type="submit">Enviar mensagem</button></div>
+        <div class="erro-form" id="erro-msg"></div>
+      </form>
+    </section>
+    <section class="cartao" style="margin-top:16px"><h2>Minhas mensagens</h2>
+      ${minhas.length ? `<div class="lista-msg">${minhas.map(m => `
+        <article class="msg ${m.resposta && !m.vista ? 'msg-nova' : ''}">
+          <div class="msg-topo">${pilulaTipo(m.tipo)}<span class="apagado pequeno">${fmtData(m.criadoEm, true)}</span>
+            ${m.resposta ? '<span class="pilula p-certa">Respondida</span>' : '<span class="pilula p-neutra">Aguardando resposta</span>'}
+            ${m.resposta && !m.vista ? '<span class="pilula p-fcc">NOVA RESPOSTA</span>' : ''}</div>
+          ${m.qid ? `<div class="pequeno texto2">Questão: ${rotuloQuestao(m.qid)}</div>` : ''}
+          <p class="msg-texto">${esc(m.texto)}</p>
+          ${m.resposta ? `<div class="msg-resposta"><div class="pequeno" style="font-weight:800;color:var(--ouro)">Resposta do administrador · ${fmtData(m.respondidaEm, true)}</div><p class="msg-texto">${esc(m.resposta)}</p></div>` : ''}
+        </article>`).join('')}</div>` : '<div class="vazio">Você ainda não mandou nenhuma mensagem.</div>'}
+    </section>${rodape()}`;
+  S.contatoTipo = null; S.contatoQid = null;
+  const f = $('#form-msg');
+  f.elements.tipo.onchange = () => { $('#campo-qid').hidden = f.elements.tipo.value !== 'erro'; };
+  f.elements.texto.oninput = () => { $('#cont-msg').textContent = f.elements.texto.value.length; };
+  f.onsubmit = async e => {
+    e.preventDefault();
+    const er = $('#erro-msg'); er.textContent = ''; er.className = 'erro-form';
+    const bt = f.querySelector('button[type=submit]'); bt.disabled = true;
+    try {
+      const tipo = f.elements.tipo.value;
+      await enviarMensagem({ tipo, texto: f.elements.texto.value, qid: tipo === 'erro' ? f.elements.qid.value.trim().toUpperCase() : null });
+      toast('Mensagem enviada! Obrigado.');
+      telaContato(c);
+    } catch (err) { er.textContent = err.msg || msgErro(err); } finally { bt.disabled = false; }
+  };
+  // marca respostas como vistas
+  const novas = minhas.filter(m => m.resposta && !m.vista);
+  if (novas.length) {
+    Promise.all(novas.map(m => S.backend.marcarVista(m.id).catch(() => { }))).then(() => { S.respostasNovas = 0; desenharMenu(); });
+  }
+}
+
+/* ================================================================== ADMINISTRADOR */
+function diasAtras(n) { const d = []; for (let i = n - 1; i >= 0; i--) { const x = new Date(); x.setDate(x.getDate() - i); d.push(hojeISO(x)); } return d; }
+function fmtDia(iso) { const [a, m, d] = iso.split('-'); return `${d}/${m}`; }
+function fmtRelativo(msv) {
+  if (!msv) return '—';
+  const s = Math.round((Date.now() - msv) / 1000);
+  if (s < 60) return 'agora';
+  if (s < 3600) return `há ${Math.round(s / 60)} min`;
+  if (s < 86400) return `há ${Math.round(s / 3600)} h`;
+  const d = Math.round(s / 86400); return d === 1 ? 'ontem' : `há ${d} dias`;
+}
+function graficoColunas(dias, valores, { cls = 'ouro', acao = '', sel = null, rotulo = 'acessos' } = {}) {
+  const max = Math.max(3, ...valores);
+  return `<div class="colunas">${dias.map((d, i) => `<div class="col ${acao ? 'clicavel' : ''} ${sel === d ? 'sel' : ''}" ${acao ? `data-acao="${acao}" data-dia="${d}"` : ''}>
+      ${valores[i] ? `<i class="${cls}" style="height:${valores[i] / max * 100}%"></i>` : ''}<span class="dica-col">${fmtDia(d)}: ${valores[i]} ${rotulo}</span></div>`).join('')}</div>
+    <div class="eixo-x"><span>${fmtDia(dias[0])}</span><span>${fmtDia(dias[Math.floor(dias.length / 2)])}</span><span>hoje</span></div>`;
+}
+async function telaAdmin(c, sub) {
+  if (!ehAdmin()) { c.innerHTML = '<div class="cartao vazio">Área restrita ao administrador.</div>'; return; }
+  c.innerHTML = '<div class="vazio">Carregando o painel…</div>';
+  const DIAS = diasAtras(14);
+  const A = S.adm = S.adm || {};
+  A.dia = A.dia || DIAS[DIAS.length - 1];
+  A.filtroMsg = A.filtroMsg || 'naolidas';
+  const [dados, acessos, quem, msgs, sims, online] = await Promise.all([
+    S.backend.admUsuarios(), S.backend.admAcessosPorDia(DIAS), S.backend.admAcessosDoDia(A.dia),
+    S.backend.admMensagens(), S.backend.admContarSimulados().catch(() => null), S.backend.contarOnline().catch(() => null)
+  ]);
+  A.dados = dados;
+  const us = dados.usuarios;
+  const nomes = Object.fromEntries(us.map(u => [u.uid, u.username]));
+  const stat = u => { let n = 0, a = 0; for (const r of Object.values(u.r)) { n += r.n || 0; a += r.a || 0; } return { n, a, unicas: Object.keys(u.r).length }; };
+  us.forEach(u => Object.assign(u, stat(u)));
+  const totalRes = us.reduce((t, u) => t + u.n, 0);
+  const resDia = DIAS.map(d => us.reduce((t, u) => t + ((u.dias[d] || {}).r || 0), 0));
+  const lim = Date.now() - 180000;
+  const onlineLista = Object.entries(dados.presenca).filter(([, em]) => em && em >= lim).map(([uid]) => nomes[uid] || '(sem nome)');
+  const naoLidas = msgs.filter(m => !m.lida).length;
+  S.naoLidas = naoLidas;
+  const listaMsg = msgs.filter(m => A.filtroMsg === 'todas' || !m.lida).sort((a, b) => (b.criadoEm || 0) - (a.criadoEm || 0));
+  const busca = (A.busca || '').toLowerCase();
+  const usOrd = [...us].filter(u => !busca || (u.username || '').toLowerCase().includes(busca)).sort((a, b) => (b.ultimo || 0) - (a.ultimo || 0) || (b.criadoEm || 0) - (a.criadoEm || 0));
+  const hoje = DIAS[DIAS.length - 1];
+  const novosHoje = us.filter(u => u.criadoEm && hojeISO(new Date(u.criadoEm)) === hoje).length;
+  c.innerHTML = `
+    <div class="cabecalho-pagina"><div><h1>Painel do <span class="marca">administrador</span></h1>
+      <p>Só você vê esta área. Os acessos começaram a ser contados a partir da publicação do painel.</p></div>
+      <button class="btn" data-acao="adm-atualizar">↻ Atualizar</button></div>
+    <div class="grade" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+      <div class="stat ouro"><div class="rot">Usuários cadastrados</div><div class="val">${num(us.length)}</div><div class="pequeno texto2">${novosHoje} novo(s) hoje</div></div>
+      <div class="stat ok"><div class="rot">Online agora</div><div class="val">${num(online ?? onlineLista.length)}</div></div>
+      <div class="stat"><div class="rot">Acessos hoje</div><div class="val">${num(acessos[acessos.length - 1])}<small> pessoas</small></div></div>
+      <div class="stat ${naoLidas ? 'err' : ''}"><div class="rot">Mensagens não lidas</div><div class="val">${num(naoLidas)}</div></div>
+      <div class="stat"><div class="rot">Questões resolvidas</div><div class="val">${num(totalRes)}</div></div>
+      <div class="stat"><div class="rot">Simulados feitos</div><div class="val">${sims == null ? '—' : num(sims)}</div></div>
+    </div>
+
+    <section class="cartao" style="margin-top:16px" id="adm-msgs">
+      <div class="q-barra"><h2 style="margin:0">Mensagens dos usuários</h2>
+        <div class="seg"><button class="${A.filtroMsg === 'naolidas' ? 'ativa' : ''}" data-acao="adm-filtro-msg" data-v="naolidas">Não lidas (${naoLidas})</button><button class="${A.filtroMsg === 'todas' ? 'ativa' : ''}" data-acao="adm-filtro-msg" data-v="todas">Todas (${msgs.length})</button></div></div>
+      ${listaMsg.length ? `<div class="lista-msg">${listaMsg.map(m => `
+        <article class="msg ${m.lida ? '' : 'msg-nova'}" data-mid="${m.id}">
+          <div class="msg-topo">${pilulaTipo(m.tipo)}<b>${esc(m.u || nomes[m.uid] || '(usuário removido)')}</b><span class="apagado pequeno">${fmtData(m.criadoEm, true)}</span>${m.lida ? '' : '<span class="pilula p-fcc">NÃO LIDA</span>'}</div>
+          ${m.qid ? `<div class="pequeno texto2">Questão: ${rotuloQuestao(m.qid)}</div>` : ''}
+          <p class="msg-texto">${esc(m.texto)}</p>
+          ${m.resposta ? `<div class="msg-resposta"><div class="pequeno" style="font-weight:800;color:var(--ouro)">Sua resposta · ${fmtData(m.respondidaEm, true)}${m.vista ? ' · lida pelo usuário' : ''}</div><p class="msg-texto">${esc(m.resposta)}</p></div>` : ''}
+          <textarea class="adm-resp" rows="2" maxlength="${MAX_MSG}" placeholder="${m.resposta ? 'Editar a resposta…' : 'Escrever uma resposta (aparece para o usuário em “Fale comigo”)…'}"></textarea>
+          <div class="botoes" style="margin-top:8px">
+            <button class="btn btn-ouro btn-peq" data-acao="adm-responder" data-id="${m.id}">Responder</button>
+            <button class="btn btn-peq" data-acao="adm-lida" data-id="${m.id}" data-v="${m.lida ? 0 : 1}">${m.lida ? 'Marcar como não lida' : 'Marcar como lida'}</button>
+            <button class="btn btn-texto btn-peq" data-acao="adm-excluir-msg" data-id="${m.id}">Excluir</button></div>
+        </article>`).join('')}</div>` : `<div class="vazio">${A.filtroMsg === 'todas' ? 'Nenhuma mensagem ainda.' : 'Nenhuma mensagem não lida. 🎉'}</div>`}
+    </section>
+
+    <div class="grade g2" style="margin-top:16px">
+      <section class="cartao"><h2>Acessos por dia</h2><p class="texto2 pequeno" style="margin-top:-6px">Pessoas diferentes que entraram no site, nos últimos 14 dias. Clique numa coluna para ver quem acessou.</p>
+        ${graficoColunas(DIAS, acessos, { acao: 'adm-dia', sel: A.dia, rotulo: 'pessoas' })}
+        <h3 style="margin-top:16px">Quem acessou em ${fmtDia(A.dia)} <span class="apagado pequeno">(${quem.length})</span></h3>
+        ${quem.length ? `<div class="chips-nomes">${quem.sort((a, b) => (b.em || 0) - (a.em || 0)).map(x => `<span class="pilula p-neutra" title="último registro ${fmtData(x.em, true)}">${esc(nomes[x.uid] || x.u || '?')}</span>`).join('')}</div>` : '<p class="apagado">Ninguém registrado neste dia.</p>'}
+      </section>
+      <section class="cartao"><h2>Questões resolvidas por dia</h2><p class="texto2 pequeno" style="margin-top:-6px">Soma de todos os usuários, nos últimos 14 dias.</p>
+        ${graficoColunas(DIAS, resDia, { cls: 'ok', rotulo: 'questões' })}
+        <h3 style="margin-top:16px">Online agora <span class="apagado pequeno">(${onlineLista.length})</span></h3>
+        ${onlineLista.length ? `<div class="chips-nomes">${onlineLista.map(n => `<span class="pilula p-certa">🟢 ${esc(n)}</span>`).join('')}</div>` : '<p class="apagado">Ninguém online neste momento.</p>'}
+      </section>
+    </div>
+
+    <section class="cartao" style="margin-top:16px"><div class="q-barra"><h2 style="margin:0">Usuários <span class="apagado pequeno">(${us.length})</span></h2>
+      <input type="text" id="adm-busca" placeholder="Buscar pelo nome de usuário…" value="${esc(A.busca || '')}" style="max-width:320px"></div>
+      <div class="rolagem"><table class="tabela"><thead><tr><th>Usuário</th><th class="some-cel">Cadastro</th><th>Último acesso</th><th class="num">Resolvidas</th><th class="num some-cel">Aproveit.</th><th></th></tr></thead><tbody>
+      ${usOrd.map(u => `<tr><td><b>${esc(u.username || '(sem nome)')}</b>${u.uid === window.ADMIN_UID ? ' <span class="apagado">(você)</span>' : ''}${u.ultimo && u.ultimo >= lim ? ' <span title="online agora">🟢</span>' : ''}</td>
+        <td class="some-cel">${fmtData(u.criadoEm)}</td><td>${fmtRelativo(u.ultimo)}</td><td class="num">${num(u.n)}</td><td class="num some-cel">${fmtPct(u.a, u.n)}</td>
+        <td>${u.uid === window.ADMIN_UID ? '' : `<button class="btn btn-perigo btn-peq" data-acao="adm-excluir-user" data-id="${u.uid}" data-u="${esc(u.username || '')}">Excluir</button>`}</td></tr>`).join('') || '<tr><td colspan="6" class="apagado">Nenhum usuário encontrado.</td></tr>'}
+      </tbody></table></div>
+      <p class="texto2 pequeno" style="margin-bottom:0">“Último acesso” passa a ser registrado a partir da publicação do painel. Usuários antigos aparecem com “—” até entrarem de novo.</p>
+    </section>
+
+    <section class="cartao" style="margin-top:16px"><h2>Usuários bloqueados <span class="apagado pequeno">(${dados.bloqueados.length})</span></h2>
+      ${dados.bloqueados.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Usuário</th><th>Bloqueado em</th><th class="some-cel">Código (UID)</th><th></th></tr></thead><tbody>
+        ${dados.bloqueados.map(b => `<tr><td>${esc(b.u || '—')}</td><td>${fmtData(b.em, true)}</td><td class="some-cel pequeno apagado">${esc(b.uid)}</td><td><button class="btn btn-peq" data-acao="adm-desbloquear" data-id="${b.uid}">Desbloquear</button></td></tr>`).join('')}
+      </tbody></table></div>` : '<p class="apagado">Nenhum usuário bloqueado.</p>'}
+      <details class="bloco-materia" style="margin-top:12px"><summary><span>Como apagar de vez a conta de login (e-mail e senha)</span><span>▾</span></summary><div>
+        <ol class="texto2" style="margin:0;padding-left:20px;line-height:1.7">
+          <li>Exclua o usuário aqui no painel (ele fica bloqueado e os dados são apagados).</li>
+          <li>Abra <b>console.firebase.google.com</b> › projeto <b>coisa-de-concurseiro-questoes</b> › <b>Authentication</b> › <b>Usuários</b>.</li>
+          <li>Procure o código (UID) que aparece na tabela acima, clique nos <b>três pontinhos ⋮</b> da linha e escolha <b>Excluir conta</b>.</li>
+          <li>Pronto: o e-mail fica livre. Se a pessoa criar uma conta nova, ela recebe outro código e não fica bloqueada; nesse caso, exclua de novo pelo painel.</li>
+        </ol></div></details>
+    </section>${rodape()}`;
+  desenharMenu();
+  const b = $('#adm-busca');
+  if (b) { b.oninput = () => { A.busca = b.value; clearTimeout(A.tb); A.tb = setTimeout(() => { const pos = b.selectionStart; telaAdmin(c).then(() => { const n = $('#adm-busca'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }); }, 350); }; }
+}
+
+Object.assign(ACOES, {
+  'avisar-erro': async (el) => {
+    const qid = el.dataset.id;
+    await modal({
+      titulo: 'Avisar erro nesta questão',
+      corpo: `<p class="texto2 pequeno">Questão ${rotuloQuestao(qid)}</p>
+        <label class="campo"><span>O que está errado?</span><textarea id="txt-erro" rows="5" maxlength="${MAX_MSG}" placeholder="Ex.: o gabarito deveria ser a letra C, porque…" style="resize:vertical"></textarea></label>
+        <div class="erro-form" id="erro-erro"></div>`,
+      botoes: [{ rot: 'Cancelar', cls: 'btn-texto', valor: null }, {
+        rot: 'Enviar aviso', cls: 'btn-ouro', acao: async raiz => {
+          try { await enviarMensagem({ tipo: 'erro', texto: $('#txt-erro', raiz).value, qid }); toast('Aviso enviado! Obrigado por ajudar a melhorar as questões.'); return true; }
+          catch (err) { $('#erro-erro', raiz).textContent = err.msg || msgErro(err); return false; }
+        }
+      }]
+    });
+  },
+  'adm-atualizar': () => { render(); },
+  'adm-dia': (el) => { S.adm.dia = el.dataset.dia; render(); },
+  'adm-filtro-msg': (el) => { S.adm.filtroMsg = el.dataset.v; render(); },
+  'adm-responder': async (el) => {
+    const art = el.closest('[data-mid]'); const txt = $('.adm-resp', art).value.trim();
+    if (!txt) { toast('Escreva a resposta antes de enviar.', 'erro'); $('.adm-resp', art).focus(); return; }
+    await S.backend.admResponder(el.dataset.id, txt); toast('Resposta enviada.'); render();
+  },
+  'adm-lida': async (el) => { await S.backend.admMarcarLida(el.dataset.id, el.dataset.v === '1'); render(); },
+  'adm-excluir-msg': async (el) => {
+    if (!await confirmar('Excluir mensagem?', 'A mensagem será apagada para você e para o usuário.', 'Excluir', true)) return;
+    await S.backend.admExcluirMensagem(el.dataset.id); toast('Mensagem excluída.'); render();
+  },
+  'adm-excluir-user': async (el) => {
+    const u = el.dataset.u || 'este usuário';
+    if (!await confirmar(`Excluir ${esc(u)}?`, `<b>${esc(u)}</b> será <b>bloqueado</b> e terá apagados o progresso, os cadernos, os simulados e a posição no ranking. As mensagens dele continuam no painel. <b>Não dá para desfazer</b> a exclusão dos dados (só o bloqueio).`, 'Excluir e bloquear', true)) return;
+    await S.backend.admExcluirUsuario(el.dataset.id, el.dataset.u); S.rank = null; toast('Usuário excluído e bloqueado.'); render();
+  },
+  'adm-desbloquear': async (el) => {
+    if (!await confirmar('Desbloquear?', 'A pessoa poderá entrar de novo e começar do zero (os dados apagados não voltam).', 'Desbloquear')) return;
+    await S.backend.admDesbloquear(el.dataset.id); toast('Usuário desbloqueado.'); render();
+  }
+});
+
+/* estilos das novidades */
+(function () {
+  const st = document.createElement('style');
+  st.textContent = `
+.selo-menu{margin-left:auto;min-width:24px;height:24px;border-radius:99px;background:#F07070;color:#fff;font-size:.8rem;font-weight:900;display:grid;place-items:center;padding:0 7px;font-family:'Nunito',sans-serif}
+.menu nav a.ativo .selo-menu{background:#0E2449;color:#DBB040}
+.online-agora{display:inline-flex;align-items:center;gap:7px;font-size:.85rem;font-weight:700;color:#DCE4F1;background:rgba(110,205,135,.12);border:1.5px solid rgba(110,205,135,.45);border-radius:99px;padding:4px 12px;white-space:nowrap}
+.online-agora i{width:9px;height:9px;border-radius:50%;background:#6ECD87;box-shadow:0 0 0 0 rgba(110,205,135,.7);animation:pulsoOn 2s infinite}
+.online-agora b{color:#6ECD87}
+.topo-mobile .online-agora{font-size:.78rem;padding:3px 9px}
+@keyframes pulsoOn{70%{box-shadow:0 0 0 8px rgba(110,205,135,0)}100%{box-shadow:0 0 0 0 rgba(110,205,135,0)}}
+.q-erro{margin-top:14px;text-align:right}
+.q-erro .btn{color:var(--apagado)}
+.q-erro .btn:hover{color:var(--verm)}
+.lista-msg{display:grid;gap:12px}
+.msg{border:2px solid var(--borda);border-radius:16px;padding:14px 16px;background:var(--cartao2)}
+.msg.msg-nova{border-color:var(--ouro2)}
+.msg-topo{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;margin-bottom:6px}
+.msg-texto{white-space:pre-wrap;margin:6px 0 0;word-break:break-word}
+.msg-resposta{margin-top:10px;border-left:4px solid var(--ouro);background:var(--cartao);border-radius:0 12px 12px 0;padding:10px 14px}
+.adm-resp{width:100%;margin-top:10px;background:var(--fundo);border:2px solid var(--borda);border-radius:12px;padding:.6em .8em;color:var(--texto);resize:vertical;font:inherit}
+textarea{width:100%;background:var(--fundo);border:2px solid var(--borda);border-radius:12px;padding:.62em .85em;color:var(--texto);font:inherit}
+textarea:focus{border-color:var(--ouro2);outline:none}
+.colunas .col i.ouro{background:var(--ouro);border-radius:4px 4px 0 0}
+.colunas .col.clicavel{cursor:pointer}
+.colunas .col.sel{background:color-mix(in srgb,var(--ouro) 18%,transparent);border-radius:4px 4px 0 0}
+.chips-nomes{display:flex;flex-wrap:wrap;gap:6px}
+`;
+  document.head.appendChild(st);
+})();
+
 /* ------------------------------------------------------------------ mostrar/ocultar senha (olho) */
 (function () {
   const st = document.createElement('style');
@@ -1285,6 +1613,7 @@ function telaEscolherNome() {
 
 /* ================================================================== INÍCIO */
 async function entrarNoApp() {
+  if (await S.backend.bloqueado()) return telaBloqueado();
   S.doc = await S.backend.carregarDoc();
   if (!S.doc) return telaEscolherNome();
   // garante estrutura
@@ -1295,11 +1624,14 @@ async function entrarNoApp() {
   $('#layout').hidden = false;
   if (!location.hash || location.hash === '#') location.hash = '#/questoes';
   render();
+  iniciarPresenca();
+  S.backend.registrarAcesso(S.doc.username, hojeISO()).catch(e => console.warn('acesso', e));
+  atualizarSelos();
 }
 async function aoMudarUsuario(u) {
   S.user = u;
   $('#carregando').hidden = true;
-  if (!u) { S.doc = null; return telaLogin(); }
+  if (!u) { S.doc = null; pararPresenca(); return telaLogin(); }
   try { await entrarNoApp(); }
   catch (e) { console.error(e); toast('Não foi possível carregar seus dados: ' + msgErro(e), 'erro'); telaLogin(); }
 }

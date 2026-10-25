@@ -9,8 +9,10 @@ const CHAVE = 'cdc_demo_v1';
 const MATS = ['DTRAB', 'PTRAB', 'DCIV', 'PCIV', 'DADM', 'DCONST'];
 
 function ler() {
-  try { return JSON.parse(localStorage.getItem(CHAVE)) || { contas: {}, docs: {}, nomes: {}, ranking: {}, cadernos: {}, simulados: {}, sessao: null }; }
-  catch (e) { return { contas: {}, docs: {}, nomes: {}, ranking: {}, cadernos: {}, simulados: {}, sessao: null }; }
+  const vazio = () => ({ contas: {}, docs: {}, nomes: {}, ranking: {}, cadernos: {}, simulados: {}, sessao: null });
+  let db; try { db = JSON.parse(localStorage.getItem(CHAVE)) || vazio(); } catch (e) { db = vazio(); }
+  db.presenca = db.presenca || {}; db.acessos = db.acessos || {}; db.mensagens = db.mensagens || {}; db.bloqueios = db.bloqueios || {};
+  return db;
 }
 function gravar(db) { try { localStorage.setItem(CHAVE, JSON.stringify(db)); } catch (e) { console.warn('localStorage indisponível', e); } }
 function id() { return Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
@@ -151,6 +153,37 @@ export function criarBackendLocal() {
       const db = ler();
       return Object.entries(db.ranking).map(([uid, v]) => ({ uid, ...v }));
     },
+    async bloqueado() { return !!ler().bloqueios[atual.uid]; },
+    async pulso(u) { const db = ler(); db.presenca[atual.uid] = { u, em: Date.now() }; gravar(db); },
+    async sairPresenca() { const db = ler(); delete db.presenca[atual.uid]; gravar(db); },
+    async contarOnline() { const lim = Date.now() - 180000; return Object.values(ler().presenca).filter(p => p.em >= lim).length; },
+    async registrarAcesso(u, dia) { const db = ler(); db.acessos[dia + '_' + atual.uid] = { dia, uid: atual.uid, u, em: Date.now() }; gravar(db); },
+    async enviarMensagem({ u, tipo, texto, qid }) {
+      const db = ler(); db.mensagens[id()] = { uid: atual.uid, u, tipo, texto, qid: qid || null, criadoEm: Date.now(), lida: false, resposta: null, respondidaEm: null, vista: false }; gravar(db);
+    },
+    async minhasMensagens() { return Object.entries(ler().mensagens).filter(([, m]) => m.uid === atual.uid).map(([k, v]) => ({ id: k, ...v })); },
+    async marcarVista(mid) { const db = ler(); if (db.mensagens[mid]) db.mensagens[mid].vista = true; gravar(db); },
+    async admUsuarios() {
+      const db = ler(); const pres = {}; Object.entries(db.presenca).forEach(([k, v]) => { pres[k] = v.em; });
+      const usuarios = Object.entries(db.docs).map(([uid, v]) => ({ uid, username: v.username, criadoEm: v.criadoEm, r: v.r || {}, dias: v.dias || {}, ultimo: pres[uid] || null }));
+      const bloqueados = Object.entries(db.bloqueios).map(([uid, v]) => ({ uid, ...v }));
+      return { usuarios, bloqueados, presenca: pres };
+    },
+    async admAcessosPorDia(dias) { const a = Object.values(ler().acessos); return dias.map(d => a.filter(x => x.dia === d).length); },
+    async admAcessosDoDia(dia) { return Object.values(ler().acessos).filter(x => x.dia === dia); },
+    async admContarSimulados() { return Object.values(ler().simulados).reduce((t, m) => t + Object.keys(m).length, 0); },
+    async admContarNaoLidas() { return Object.values(ler().mensagens).filter(m => !m.lida).length; },
+    async admMensagens() { return Object.entries(ler().mensagens).map(([k, v]) => ({ id: k, ...v })); },
+    async admMarcarLida(mid, lida) { const db = ler(); db.mensagens[mid].lida = lida; gravar(db); },
+    async admResponder(mid, resposta) { const db = ler(); Object.assign(db.mensagens[mid], { resposta, respondidaEm: Date.now(), lida: true, vista: false }); gravar(db); },
+    async admExcluirMensagem(mid) { const db = ler(); delete db.mensagens[mid]; gravar(db); },
+    async admExcluirUsuario(uid, username) {
+      const db = ler(); db.bloqueios[uid] = { u: username || '', em: Date.now() };
+      delete db.docs[uid]; delete db.ranking[uid]; delete db.cadernos[uid]; delete db.simulados[uid]; delete db.presenca[uid];
+      if (username) delete db.nomes[username.toLowerCase()];
+      gravar(db);
+    },
+    async admDesbloquear(uid) { const db = ler(); delete db.bloqueios[uid]; gravar(db); },
     async excluirConta(senha) {
       const db = ler();
       const c = db.contas[atual.uid];

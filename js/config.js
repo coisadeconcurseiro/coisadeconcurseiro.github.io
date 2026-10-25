@@ -18,6 +18,11 @@ window.FIREBASE_CONFIG = {
   appId: "1:305817193192:web:2b925f6e5297b83681d75d"
 };
 
+/* Código (UID) da conta de administrador. Só essa conta vê a aba "Administrador".
+   Copie em: Firebase › Authentication › Usuários › coluna "UID do usuário".
+   A proteção de verdade está nas regras do Firestore (firestore.rules), que usam o mesmo código. */
+window.ADMIN_UID = "Jh3g4yNWd6YtSdrCZX3Cz1LfJYh1";
+
 /* Dados do canal (aparecem no menu, no login e no rodapé) */
 window.SITE = {
   nome: "Coisa de Concurseiro",

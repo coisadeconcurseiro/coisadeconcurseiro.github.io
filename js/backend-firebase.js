@@ -9,7 +9,8 @@ import {
 } from './vendor/firebase-auth.js';
 import {
   getFirestore, doc, getDoc, getDocs, collection, writeBatch, serverTimestamp,
-  FieldPath, addDoc, setDoc, deleteDoc
+  FieldPath, addDoc, setDoc, deleteDoc, updateDoc, query, where, Timestamp,
+  getCountFromServer, collectionGroup
 } from './vendor/firebase-firestore.js';
 
 const MATS = ['DTRAB', 'PTRAB', 'DCIV', 'PCIV', 'DADM', 'DCONST'];
@@ -153,6 +154,63 @@ export function criarBackendFirebase(config) {
       return s.docs.map(d => ({ uid: d.id, ...d.data(), em: ms(d.data().em) }));
     },
 
+    /* ---------------- presença, acessos, bloqueio ---------------- */
+    async bloqueado() {
+      try { return (await getDoc(doc(db, 'bloqueios', atual.uid))).exists(); } catch (e) { return false; }
+    },
+    async pulso(u) { await setDoc(doc(db, 'presenca', atual.uid), { u, em: serverTimestamp() }); },
+    async sairPresenca() { try { await deleteDoc(doc(db, 'presenca', atual.uid)); } catch (e) { } },
+    async contarOnline() {
+      const s = await getCountFromServer(query(collection(db, 'presenca'), where('em', '>=', Timestamp.fromMillis(Date.now() - 180000))));
+      return s.data().count;
+    },
+    async registrarAcesso(u, dia) {
+      await setDoc(doc(db, 'acessos', dia + '_' + atual.uid), { dia, uid: atual.uid, u, em: serverTimestamp() });
+    },
+    /* ---------------- mensagens (Fale comigo) ---------------- */
+    async enviarMensagem({ u, tipo, texto, qid }) {
+      await addDoc(collection(db, 'mensagens'), { uid: atual.uid, u, tipo, texto, qid: qid || null, criadoEm: serverTimestamp(), lida: false, resposta: null, respondidaEm: null, vista: false });
+    },
+    async minhasMensagens() {
+      const s = await getDocs(query(collection(db, 'mensagens'), where('uid', '==', atual.uid)));
+      return s.docs.map(d => { const v = d.data(); return { id: d.id, ...v, criadoEm: ms(v.criadoEm), respondidaEm: ms(v.respondidaEm) }; });
+    },
+    async marcarVista(id) { await updateDoc(doc(db, 'mensagens', id), { vista: true }); },
+    /* ---------------- administrador ---------------- */
+    async admUsuarios() {
+      const [us, pr, bl] = await Promise.all([getDocs(collection(db, 'users')), getDocs(collection(db, 'presenca')), getDocs(collection(db, 'bloqueios'))]);
+      const pres = {}; pr.docs.forEach(d => { pres[d.id] = ms(d.data().em); });
+      const usuarios = us.docs.map(d => { const v = d.data(); return { uid: d.id, username: v.username, criadoEm: ms(v.criadoEm), r: v.r || {}, dias: v.dias || {}, ultimo: pres[d.id] || null }; });
+      const bloqueados = bl.docs.map(d => ({ uid: d.id, ...d.data(), em: ms(d.data().em) }));
+      return { usuarios, bloqueados, presenca: pres };
+    },
+    async admAcessosPorDia(dias) {
+      return Promise.all(dias.map(async dia => (await getCountFromServer(query(collection(db, 'acessos'), where('dia', '==', dia)))).data().count));
+    },
+    async admAcessosDoDia(dia) {
+      const s = await getDocs(query(collection(db, 'acessos'), where('dia', '==', dia)));
+      return s.docs.map(d => ({ ...d.data(), em: ms(d.data().em) }));
+    },
+    async admContarSimulados() { return (await getCountFromServer(collectionGroup(db, 'simulados'))).data().count; },
+    async admContarNaoLidas() { return (await getCountFromServer(query(collection(db, 'mensagens'), where('lida', '==', false)))).data().count; },
+    async admMensagens() {
+      const s = await getDocs(collection(db, 'mensagens'));
+      return s.docs.map(d => { const v = d.data(); return { id: d.id, ...v, criadoEm: ms(v.criadoEm), respondidaEm: ms(v.respondidaEm) }; });
+    },
+    async admMarcarLida(id, lida) { await updateDoc(doc(db, 'mensagens', id), { lida }); },
+    async admResponder(id, resposta) { await updateDoc(doc(db, 'mensagens', id), { resposta, respondidaEm: serverTimestamp(), lida: true, vista: false }); },
+    async admExcluirMensagem(id) { await deleteDoc(doc(db, 'mensagens', id)); },
+    async admExcluirUsuario(uid, username) {
+      await setDoc(doc(db, 'bloqueios', uid), { u: username || '', em: serverTimestamp() });
+      const [cads, sims] = await Promise.all([getDocs(collection(db, 'users', uid, 'cadernos')), getDocs(collection(db, 'users', uid, 'simulados'))]);
+      await Promise.all([...cads.docs, ...sims.docs].map(d => deleteDoc(d.ref)));
+      const b = writeBatch(db);
+      b.delete(doc(db, 'ranking', uid)); b.delete(doc(db, 'presenca', uid)); b.delete(doc(db, 'users', uid));
+      if (username) b.delete(doc(db, 'usernames', username.toLowerCase()));
+      await b.commit();
+    },
+    async admDesbloquear(uid) { await deleteDoc(doc(db, 'bloqueios', uid)); },
+
     async excluirConta(senha) {
       const u = auth.currentUser;
       await reauthenticateWithCredential(u, EmailAuthProvider.credential(u.email, senha));
@@ -160,6 +218,7 @@ export function criarBackendFirebase(config) {
       const [cads, sims] = await Promise.all([getDocs(ref.cadernos()), getDocs(ref.simulados())]);
       await Promise.all([...cads.docs, ...sims.docs].map(d => deleteDoc(d.ref)));
       await deleteDoc(ref.rank());
+      try { await deleteDoc(doc(db, 'presenca', atual.uid)); } catch (e) { }
       if (perfil.exists()) await deleteDoc(ref.nome(perfil.data().username));
       await deleteDoc(ref.user());
       await deleteUser(u);
