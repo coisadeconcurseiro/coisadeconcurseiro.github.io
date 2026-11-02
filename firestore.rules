@@ -18,6 +18,8 @@ rules_version = '2';
 //    as mensagens e os acessos, e pode bloquear/excluir usuários.
 //  • "Online agora", registro de acessos e mensagens (Fale comigo / Avisar erro).
 //  • Questões anuladas/desatualizadas (avisos/questoes): todos leem, só o ADMIN grava.
+//  • 7ª matéria (ADMPUB, Técnico – Área Administrativa, 02/11/2026): é opcional nos
+//    documentos, para que as contas criadas antes dela continuem funcionando.
 // Limite (explicado no guia): o gabarito está no próprio site, então quem souber
 // programar pode registrar "acertei" de propósito. O teto é 1 ponto por questão.
 // =====================================================================
@@ -31,10 +33,13 @@ service cloud.firestore {
     function isAdmin() { return logado() && request.auth.uid == adminUid(); }
     function bloqueado() { return exists(/databases/$(database)/documents/bloqueios/$(request.auth.uid)); }
     function dono(uid) { return logado() && request.auth.uid == uid; }
-    function mats() { return ['DTRAB', 'PTRAB', 'DCIV', 'PCIV', 'DADM', 'DCONST']; }
+    function mats() { return ['DTRAB', 'PTRAB', 'DCIV', 'PCIV', 'DADM', 'DCONST', 'ADMPUB']; }
+    function matsBase() { return ['DTRAB', 'PTRAB', 'DCIV', 'PCIV', 'DADM', 'DCONST']; }   // obrigatórias
     function caminhoUser(uid) { return /databases/$(database)/documents/users/$(uid); }
     function mapasVazios() { return {'DTRAB': {}, 'PTRAB': {}, 'DCIV': {}, 'PCIV': {}, 'DADM': {}, 'DCONST': {}}; }
     function listasVazias() { return {'DTRAB': [], 'PTRAB': [], 'DCIV': [], 'PCIV': [], 'DADM': [], 'DCONST': []}; }
+    function mapasVazios7() { return {'DTRAB': {}, 'PTRAB': {}, 'DCIV': {}, 'PCIV': {}, 'DADM': {}, 'DCONST': {}, 'ADMPUB': {}}; }
+    function listasVazias7() { return {'DTRAB': [], 'PTRAB': [], 'DCIV': [], 'PCIV': [], 'DADM': [], 'DCONST': [], 'ADMPUB': []}; }
     function camposUser() { return ['username', 'criadoEm', 'r', 'dias', 'pc', 'pe', 'ciclo', 'em', 'zeradoEm']; }
 
     // ---------------------------------------------------------------- nomes de usuário
@@ -58,8 +63,8 @@ service cloud.firestore {
         && d.criadoEm == request.time
         && d.em == request.time
         && d.r == {} && d.dias == {}
-        && d.pc == mapasVazios() && d.pe == mapasVazios()
-        && d.ciclo == listasVazias()
+        && ((d.pc == mapasVazios() && d.pe == mapasVazios()) || (d.pc == mapasVazios7() && d.pe == mapasVazios7()))
+        && (d.ciclo == listasVazias() || d.ciclo == listasVazias7())
         && d.zeradoEm == null
         && !bloqueado()
         && getAfter(/databases/$(database)/documents/usernames/$(d.username.lower())).data.uid == request.auth.uid;
@@ -68,14 +73,15 @@ service cloud.firestore {
       return depois.diff(antes).removedKeys().size() == 0
         && depois.diff(antes).changedKeys().size() == 0;
     }
+    // get(m, {}): a matéria pode ainda não existir no documento (contas antigas e ADMPUB)
     function materiaOk(a, d, m) {
-      return d.pc[m] is map && d.pe[m] is map
-        && soAcrescenta(a.pc[m], d.pc[m])
-        && soAcrescenta(a.pe[m], d.pe[m])
-        && d.pc[m].keys().toSet().intersection(d.pe[m].keys().toSet()).size() == 0;
+      return d.pc.get(m, {}) is map && d.pe.get(m, {}) is map
+        && soAcrescenta(a.pc.get(m, {}), d.pc.get(m, {}))
+        && soAcrescenta(a.pe.get(m, {}), d.pe.get(m, {}))
+        && d.pc.get(m, {}).keys().toSet().intersection(d.pe.get(m, {}).keys().toSet()).size() == 0;
     }
     function novas(a, d, m) {
-      return (d.pc[m].size() - a.pc[m].size()) + (d.pe[m].size() - a.pe[m].size());
+      return (d.pc.get(m, {}).size() - a.pc.get(m, {}).size()) + (d.pe.get(m, {}).size() - a.pe.get(m, {}).size());
     }
     function atualizacaoUserOk(a, d) {
       return d.keys().hasOnly(camposUser())
@@ -86,11 +92,13 @@ service cloud.firestore {
         && (d.zeradoEm == a.zeradoEm || d.zeradoEm == request.time)
         && d.r is map && d.dias is map && d.ciclo is map
         && d.pc.keys().hasOnly(mats()) && d.pe.keys().hasOnly(mats())
-        && d.pc.keys().hasAll(mats()) && d.pe.keys().hasAll(mats())
+        && d.pc.keys().hasAll(matsBase()) && d.pe.keys().hasAll(matsBase())
         && materiaOk(a, d, 'DTRAB') && materiaOk(a, d, 'PTRAB') && materiaOk(a, d, 'DCIV')
         && materiaOk(a, d, 'PCIV') && materiaOk(a, d, 'DADM') && materiaOk(a, d, 'DCONST')
+        && materiaOk(a, d, 'ADMPUB')
         && novas(a, d, 'DTRAB') + novas(a, d, 'PTRAB') + novas(a, d, 'DCIV')
-           + novas(a, d, 'PCIV') + novas(a, d, 'DADM') + novas(a, d, 'DCONST') <= 60;
+           + novas(a, d, 'PCIV') + novas(a, d, 'DADM') + novas(a, d, 'DCONST')
+           + novas(a, d, 'ADMPUB') <= 60;
     }
 
     match /users/{uid} {
@@ -115,7 +123,9 @@ service cloud.firestore {
 
       // ------------------------------------------------------------ simulados
       function simuladoOk(d) {
-        return d.keys().hasOnly(['data', 'acertos', 'total', 'tempo', 'porMateria', 'qids', 'resp', 'criadoEm'])
+        return d.keys().hasOnly(['data', 'acertos', 'total', 'tempo', 'porMateria', 'qids', 'resp', 'criadoEm', 'tipo', 'reais'])
+          && d.get('tipo', 'analista') in ['analista', 'tecnico']
+          && d.get('reais', false) is bool
           && d.total == 40
           && d.qids is list && d.qids.size() == 40
           && d.resp is list && d.resp.size() == 40
@@ -132,8 +142,8 @@ service cloud.firestore {
 
     // ---------------------------------------------------------------- ranking (leitura para quem está logado)
     function contaOk(d, u, m) {
-      return d.pts[m] == u.pc[m].size()
-        && d.resp[m] == u.pc[m].size() + u.pe[m].size();
+      return d.pts.get(m, 0) == u.pc.get(m, {}).size()
+        && d.resp.get(m, 0) == u.pc.get(m, {}).size() + u.pe.get(m, {}).size();
     }
     function rankingOk(d) {
       let u = getAfter(caminhoUser(request.auth.uid)).data;
@@ -143,8 +153,11 @@ service cloud.firestore {
         && d.pts.keys().hasOnly(mats()) && d.resp.keys().hasOnly(mats())
         && contaOk(d, u, 'DTRAB') && contaOk(d, u, 'PTRAB') && contaOk(d, u, 'DCIV')
         && contaOk(d, u, 'PCIV') && contaOk(d, u, 'DADM') && contaOk(d, u, 'DCONST')
-        && d.total == d.pts.DTRAB + d.pts.PTRAB + d.pts.DCIV + d.pts.PCIV + d.pts.DADM + d.pts.DCONST
-        && d.totalResp == d.resp.DTRAB + d.resp.PTRAB + d.resp.DCIV + d.resp.PCIV + d.resp.DADM + d.resp.DCONST;
+        && contaOk(d, u, 'ADMPUB')
+        && d.total == d.pts.get('DTRAB', 0) + d.pts.get('PTRAB', 0) + d.pts.get('DCIV', 0) + d.pts.get('PCIV', 0)
+           + d.pts.get('DADM', 0) + d.pts.get('DCONST', 0) + d.pts.get('ADMPUB', 0)
+        && d.totalResp == d.resp.get('DTRAB', 0) + d.resp.get('PTRAB', 0) + d.resp.get('DCIV', 0) + d.resp.get('PCIV', 0)
+           + d.resp.get('DADM', 0) + d.resp.get('DCONST', 0) + d.resp.get('ADMPUB', 0);
     }
     match /ranking/{uid} {
       allow read: if logado();

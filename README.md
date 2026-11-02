@@ -16,7 +16,7 @@ O site não tem servidor próprio: as páginas ficam no GitHub Pages, e as conta
 | `js/backend-firebase.js` | ligação com o Firebase |
 | `js/backend-local.js` | modo demonstração (sem Firebase, dados só no navegador) |
 | `js/vendor/` | SDK oficial do Firebase 12.19.0 (licença Apache 2.0) |
-| `dados/questoes.js` | as 1.115 questões, com códigos fixos |
+| `dados/questoes.js` | as 1.541 questões, com códigos fixos |
 | `img/` | logotipo e ícones |
 | `firestore.rules` | regras de segurança do Firestore |
 | `ferramentas/atualizar_banco.py` | atualiza o banco a partir de novos cadernos em PDF |

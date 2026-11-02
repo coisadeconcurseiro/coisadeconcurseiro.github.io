@@ -6,12 +6,13 @@ Todo o progresso dos usuários fica preso ao **código fixo** de cada questão, 
 
 | Matéria | Sigla | Códigos hoje |
 |---|---|---|
-| Direito do Trabalho | DTRAB | DTRAB-001 a DTRAB-205 |
+| Direito do Trabalho | DTRAB | DTRAB-001 a DTRAB-486 (volumes 1 e 2) |
 | Direito Processual do Trabalho | PTRAB | PTRAB-001 a PTRAB-145 |
 | Direito Civil | DCIV | DCIV-001 a DCIV-120 |
 | Direito Processual Civil | PCIV | PCIV-001 a PCIV-280 |
 | Direito Administrativo | DADM | DADM-001 a DADM-200 |
 | Direito Constitucional | DCONST | DCONST-001 a DCONST-165 |
+| Noções de Administração Pública (só Técnico – Área Administrativa) | ADMPUB | ADMPUB-001 a ADMPUB-145 |
 
 **Regra de ouro:** um código, depois de publicado, **nunca muda de questão e nunca é reaproveitado**. Questões novas recebem sempre o próximo número livre da matéria. Por exemplo, a próxima questão de Direito Civil será a `DCIV-121`, mesmo que no caderno em PDF ela apareça no meio do tópico 3.
 
@@ -57,14 +58,22 @@ Depois, envie o `dados/questoes.js` atualizado para o GitHub.
 - **Corrigir só um gabarito ou um comentário:** se o enunciado e as alternativas continuarem iguais, a questão mantém o código. As estatísticas antigas continuam valendo como foram registradas.
 - **Mudar o enunciado ou alguma alternativa de uma questão:** a ferramenta vai tratar a versão nova como **outra questão**, com código novo. A antiga continua no banco, a menos que você use `--remover-ausentes`. Se quiser que o código antigo seja mantido mesmo assim, peça ao Claude para fazer a troca manualmente.
 - **Remover questões:** os cadernos que as continham passam a ignorá-las, com um aviso na tela do caderno. Os pontos de ranking já conquistados não são retirados.
+- **Noções de Administração Pública (ADMPUB, 02/11/2026):** matéria só do Técnico – Área Administrativa. Os tópicos do Técnico nas outras matérias ficam na constante `TECNICO_TOPICOS` de `js/app.js`, e a composição dos dois simulados fica em `SIMULADOS`.
 - **Uma matéria nova** (por exemplo, Língua Portuguesa): exige uma pequena mudança no código do site e nas regras do Firestore, porque a sigla nova precisa ser acrescentada. Peça ao Claude: *"Inclua a matéria X no site de questões"*. Depois, envie os arquivos alterados e publique as regras novas (Etapa 4 do guia).
-- **Composição do simulado** (10/10/5/5/5/5): fica na constante `SIM_COMP` do arquivo `js/app.js`.
+- **Composição dos simulados** (Analista 10/10/5/5/5/5; Técnico 10 DT, 10 PT, 10 ADMPUB, 5 Const., 5 Adm.): fica na constante `SIMULADOS` do arquivo `js/app.js`.
 
 ## O que nunca fazer
 
 - Não renumere as questões e não edite os códigos à mão.
 - Não apague o arquivo `questoes.js` antigo antes de ter o novo pronto.
 - Não troque a sigla de uma matéria (`DCIV`, `PCIV`…).
+
+## Direito do Trabalho: volumes 1 e 2 (02/11/2026)
+
+- **DTRAB-001 a DTRAB-205:** volume 1. A DTRAB-105 foi anulada e saiu do caderno refeito em 26/10/2026, mas continua no banco, marcada como anulada no painel.
+- **DTRAB-206:** a questão que substituiu a DTRAB-105 no volume 1 refeito (TRT-24, 2016, tópico 21).
+- **DTRAB-207 a DTRAB-486:** volume 2 (280 questões).
+- Desde 02/11/2026, o banco é ordenado por matéria › tópico › código. Por isso as questões novas aparecem junto das antigas do mesmo tópico.
 
 ## Questão repetida entre matérias
 
