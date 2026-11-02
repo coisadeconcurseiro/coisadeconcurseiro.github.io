@@ -13,7 +13,7 @@ import {
   getCountFromServer, collectionGroup
 } from './vendor/firebase-firestore.js';
 
-const MATS = ['DTRAB', 'PTRAB', 'DCIV', 'PCIV', 'DADM', 'DCONST'];
+const MATS = ['DTRAB', 'PTRAB', 'DCIV', 'PCIV', 'DADM', 'DCONST', 'ADMPUB'];
 const ms = v => (v && typeof v.toMillis === 'function') ? v.toMillis() : (v ?? null);
 
 function zeros() { const o = {}; MATS.forEach(m => o[m] = 0); return o; }

@@ -13,8 +13,33 @@ const TOP = {};
 B.materias.forEach(m => m.topicos.forEach(t => { TOP[m.id + ':' + t.n] = t.t; }));
 const ORGAOS = [...new Set(B.questoes.filter(q => q.org).map(q => q.org))].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }));
 const ANOS = [...new Set(B.questoes.filter(q => q.ano).map(q => q.ano))].sort((a, b) => b - a);
-const SIM_COMP = { DTRAB: 10, PTRAB: 10, DCIV: 5, PCIV: 5, DADM: 5, DCONST: 5 };
 const SIM_TOTAL = 40;
+/* Simulados por cargo (40 questões cada) */
+const SIMULADOS = {
+  analista: { nome: 'Analista Judiciário – Área Judiciária', curto: 'Analista', comp: { DTRAB: 10, PTRAB: 10, DCIV: 5, PCIV: 5, DADM: 5, DCONST: 5 } },
+  tecnico: { nome: 'Técnico Judiciário – Área Administrativa', curto: 'Técnico', comp: { DTRAB: 10, PTRAB: 10, ADMPUB: 10, DCONST: 5, DADM: 5 } }
+};
+/* Tópicos que estão no programa do Técnico Judiciário – Área Administrativa (cargo 21, Anexo II do edital).
+   As questões foram organizadas pelos tópicos do Analista; o Técnico tem programa de "Noções", menor.
+   null = todos os tópicos da matéria. Matéria ausente = não cai para o Técnico. */
+const TECNICO_TOPICOS = {
+  DTRAB: [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 20, 21, 22, 25, 26, 28, 30, 31, 32, 33, 36, 37, 38, 39, 40],
+  PTRAB: [1, 2, 5, 7, 8, 9, 10, 12, 14, 15, 20, 22, 23, 24, 25, 26],
+  DCONST: [1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33],
+  DADM: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 28, 29, 30, 31, 32, 33, 34, 35, 40],
+  ADMPUB: null
+};
+const SO_TECNICO = ['ADMPUB'];   // matérias só do Técnico
+/* a questão faz parte do programa do cargo? ('analista' | 'tecnico') */
+function doCargo(q, cargo) {
+  if (cargo === 'analista') return !SO_TECNICO.includes(q.m);
+  if (cargo === 'tecnico') { if (!(q.m in TECNICO_TOPICOS)) return false; const t = TECNICO_TOPICOS[q.m]; return t === null || t.includes(q.tp); }
+  return true;
+}
+const TOTAL_TOPICOS = B.materias.reduce((t, m) => t + m.topicos.length, 0);
+function seloCargo(m, curto = false) {
+  return SO_TECNICO.includes(m) ? `<span class="selo-cargo ${curto ? 'curto' : ''}" title="Matéria só do cargo de Técnico Judiciário – Área Administrativa">${curto ? 'Técnico' : 'Técnico – Área Administrativa'}</span>` : '';
+}
 const LETRAS = 'ABCDE';
 const MIN_REVISAO = 5;       // mínimo de respostas no assunto para entrar na lista de revisão
 const LIMITE_REVISAO = 70;   // aproveitamento abaixo deste % entra na revisão
@@ -265,7 +290,7 @@ const IC_TESOURA = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" 
 
 /* ------------------------------------------------------------------ filtros */
 function prefExcluir() { try { return JSON.parse(localStorage.getItem('cdc_excluir')) || {}; } catch (e) { return {}; } }
-function filtrosPadrao() { const p = prefExcluir(); return { mats: [], tops: [], origem: 'todas', orgs: [], anos: [], situacao: 'todas', qtd: '20', ordem: 'banco', semAnul: !!p.semAnul, semDesat: !!p.semDesat }; }
+function filtrosPadrao() { const p = prefExcluir(); return { mats: [], tops: [], origem: 'todas', orgs: [], anos: [], situacao: 'todas', qtd: '20', ordem: 'banco', cargo: 'todos', semAnul: !!p.semAnul, semDesat: !!p.semDesat }; }
 function situacaoDe(id) {
   const r = S.doc?.r?.[id];
   if (!r) return 'nao';
@@ -273,6 +298,7 @@ function situacaoDe(id) {
 }
 function aplicarFiltros(f) {
   return B.questoes.filter(q => {
+    if (f.cargo && f.cargo !== 'todos' && !doCargo(q, f.cargo)) return false;
     if (f.mats.length && !f.mats.includes(q.m)) return false;
     if (f.tops.length && !f.tops.includes(q.m + ':' + q.tp)) return false;
     if (f.origem === 'reais' && !q.r) return false;
@@ -304,14 +330,19 @@ function msHTML(nome, rotulo, opcoes, sel, larga = false) {
 function opcoesTopicos(f) {
   const mats = f.mats.length ? f.mats : MATS;
   const op = [];
-  mats.forEach(m => MAT[m].topicos.forEach(t => op.push({ v: m + ':' + t.n, t: `${t.n}. ${t.t}`, g: MAT[m].nome })));
+  const cargo = f.cargo && f.cargo !== 'todos' ? f.cargo : null;
+  mats.forEach(m => MAT[m].topicos.forEach(t => {
+    if (cargo && !doCargo({ m, tp: t.n }, cargo)) return;   // só os tópicos do programa do cargo escolhido
+    op.push({ v: m + ':' + t.n, t: `${t.n}. ${t.t}`, g: MAT[m].nome });
+  }));
   return op;
 }
 function filtrosHTML(chave, { situacao = true, extras = true } = {}) {
   const f = S.filtros[chave];
   const sel = (nome, rot, ops) => `<label class="campo"><span>${rot}</span><select data-f="${nome}">${ops.map(([v, t]) => `<option value="${v}" ${f[nome] === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>`;
   return `<div class="filtros" data-filtros="${chave}">
-    ${msHTML('mats', 'Matéria', B.materias.map(m => ({ v: m.id, t: m.nome })), f.mats)}
+    ${sel('cargo', 'Cargo', [['todos', 'Todos os cargos'], ['analista', 'Analista – Área Judiciária'], ['tecnico', 'Técnico – Área Administrativa']])}
+    ${msHTML('mats', 'Matéria', B.materias.map(m => ({ v: m.id, t: m.nome + (SO_TECNICO.includes(m.id) ? ' (Técnico)' : '') })), f.mats)}
     ${msHTML('tops', 'Assunto (tópico do edital)', opcoesTopicos(f), f.tops, true)}
     ${sel('origem', 'Origem', [['todas', 'Todas'], ['reais', 'Reais da FCC'], ['ineditas', 'Inéditas (padrão FCC)']])}
     ${msHTML('orgs', 'Órgão', ORGAOS.map(o => ({ v: o, t: o })), f.orgs)}
@@ -348,6 +379,12 @@ function aoMudarFiltro(ev) {
     }
   } else if (ev.target.matches('select[data-f]')) {
     f[ev.target.dataset.f] = ev.target.value;
+    if (ev.target.dataset.f === 'cargo') {   // refaz a lista de assuntos conforme o cargo
+      const validos = new Set(opcoesTopicos(f).map(o => o.v));
+      f.tops = f.tops.filter(t => validos.has(t));
+      const campo = $('[data-campo="tops"]', caixa);
+      if (campo) campo.outerHTML = msHTML('tops', 'Assunto (tópico do edital)', opcoesTopicos(f), f.tops, true);
+    }
   } else if (ev.target.matches('input[data-fb]')) {
     f[ev.target.dataset.fb] = ev.target.checked;
     try { localStorage.setItem('cdc_excluir', JSON.stringify({ semAnul: !!f.semAnul, semDesat: !!f.semDesat })); } catch (e) { }
@@ -424,7 +461,7 @@ function questaoHTML(q, { num, total, marcada = null, respondida = false, modo =
     ? `<span class="pilula ${r.ok ? 'p-certa' : 'p-errada'}" title="Sua última resposta a esta questão">${r.ok ? 'Você já acertou' : 'Você já errou'} · ${r.n}×</span>` : '';
   return `<article class="questao ${respondida ? (ok ? 'acertou' : 'errou') : ''}" data-qid="${q.id}">
     <div class="q-cab"><span class="q-num">Questão ${num}${total ? ` <span class="apagado" style="font-size:.85rem">de ${total}</span>` : ''}</span>${pilulaOrigem(q)}${historico}<span class="q-cod">${q.id}</span></div>
-    <div class="q-topico">${esc(MAT[q.m].nome)} · <b>${q.tp}. ${esc(TOP[q.m + ':' + q.tp])}</b></div>
+    <div class="q-topico">${esc(MAT[q.m].nome)} · <b>${q.tp}. ${esc(TOP[q.m + ':' + q.tp])}</b>${seloCargo(q.m, true)}</div>
     ${faixaAviso(q)}
     ${enunciadoHTML(q)}
     ${alts}
@@ -501,7 +538,7 @@ async function telaQuestoes(c, sub) {
   const totalResp = Object.keys(S.doc.r).length;
   c.innerHTML = `${faixaDemo()}
     <div class="cabecalho-pagina"><div><h1>Resolver <span class="marca">questões</span></h1>
-      <p>${num(B.questoes.length)} questões comentadas, alternativa por alternativa, nos 223 tópicos do edital.</p></div>
+      <p>${num(B.questoes.length)} questões comentadas, alternativa por alternativa, nos ${TOTAL_TOPICOS} tópicos do edital.</p></div>
       <span class="dica">${totalResp ? `você já resolveu ${num(totalResp)} questões diferentes!` : 'comece por um tópico que caiu na aula de hoje :)'}</span></div>
     ${S.pratica ? `<div class="cartao cartao-ouro" style="margin-bottom:16px;display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center">
         <div><b>${esc(S.pratica.titulo)}</b><div class="texto2 pequeno">Questão ${S.pratica.i + 1} de ${S.pratica.ids.length} · ${Object.keys(S.pratica.resp).length} respondidas</div></div>
@@ -519,7 +556,7 @@ async function telaQuestoes(c, sub) {
         const feitas = ids.filter(q => S.doc.r[q.id]).length;
         return `<button class="cartao" style="text-align:left;cursor:pointer;color:inherit" data-acao="atalho-materia" data-m="${m.id}">
           <div class="pequeno texto2" style="font-weight:800;letter-spacing:.04em">${m.topicos.length} TÓPICOS · ${ids.length} QUESTÕES</div>
-          <h3 style="margin:4px 0 10px">${esc(m.nome)}</h3>
+          <h3 style="margin:4px 0 10px">${esc(m.nome)}</h3>${seloCargo(m.id)}
           <div class="q-progresso" style="margin:0 0 6px"><i style="width:${pct(feitas, ids.length)}%"></i></div>
           <div class="pequeno texto2">${feitas} de ${ids.length} resolvidas</div></button>`;
       }).join('')}
@@ -577,26 +614,36 @@ function salvarSimLocal() { try { localStorage.setItem(chaveSim(), JSON.stringif
 function lerSimLocal() { try { return JSON.parse(localStorage.getItem(chaveSim())); } catch (e) { return null; } }
 function apagarSimLocal() { try { localStorage.removeItem(chaveSim()); } catch (e) { } }
 
-function sortearSimulado() {
+/* Sorteio do simulado. O ciclo (sem repetição) é por matéria e vale para os dois cargos.
+   tipo: 'analista' | 'tecnico'; soReais: só questões reais da FCC. */
+function sortearSimulado(tipo = 'analista', soReais = false) {
   const ciclo = {}, qids = [];
-  for (const [m, n] of Object.entries(SIM_COMP)) {
+  for (const [m, n] of Object.entries(SIMULADOS[tipo].comp)) {
     const todos = B.questoes.filter(q => q.m === m && !avisoDe(q.id)).map(q => q.id);   // anuladas e desatualizadas não entram
+    let pool = B.questoes.filter(q => q.m === m && !avisoDe(q.id) && doCargo(q, tipo) && (!soReais || q.r)).map(q => q.id);
+    if (pool.length < n) pool = todos;   // segurança: nunca acontece com o banco atual
+    const noPool = new Set(pool);
     const usados = new Set((S.doc.ciclo?.[m] || []).filter(id => Q[id]));
-    const disp = todos.filter(id => !usados.has(id));
-    let esc_;
+    const disp = pool.filter(id => !usados.has(id));
+    let esc_, novo;
     if (disp.length >= n) {
       esc_ = embaralhar(disp).slice(0, n);
-      ciclo[m] = [...usados, ...esc_];
-      if (ciclo[m].length >= todos.length) ciclo[m] = [];
+      novo = [...usados, ...esc_];
     } else {
-      // o que restou do ciclo atual + começo de um novo ciclo
-      const resto = embaralhar(todos.filter(id => !disp.includes(id))).slice(0, n - disp.length);
+      // o que restou do ciclo nesse grupo + começo de um novo ciclo nesse grupo
+      const resto = embaralhar(pool.filter(id => !disp.includes(id))).slice(0, n - disp.length);
       esc_ = [...disp, ...resto];
-      ciclo[m] = [...resto];
+      novo = [...[...usados].filter(id => !noPool.has(id)), ...resto];
     }
+    const sn = new Set(novo);
+    ciclo[m] = todos.every(id => sn.has(id)) ? [] : novo;   // todas da matéria já saíram: recomeça
     qids.push(...embaralhar(esc_));
   }
   return { qids, ciclo };
+}
+function pilulasSimulado(s) {
+  const t = SIMULADOS[s.tipo || 'analista'];
+  return `<span class="pilula ${s.tipo === 'tecnico' ? 'p-caso' : 'p-juris'}" title="${esc(t.nome)}">${t.curto}</span>${s.reais ? ' <span class="pilula p-fcc" title="Só questões reais da FCC">Só reais</span>' : ''}`;
 }
 async function telaSimulados(c, sub) {
   if (sub[0] === 'fazer') return telaFazerSimulado(c);
@@ -606,14 +653,23 @@ async function telaSimulados(c, sub) {
   const hist = [...S.simulados].sort((a, b) => (b.criadoEm || b.data) - (a.criadoEm || a.data));
   c.innerHTML = `${faixaDemo()}
     <div class="cabecalho-pagina"><div><h1>Simulados <span class="marca">de 40 questões</span></h1>
-      <p>Sorteio fechado, no peso da prova. Você só vê a nota e a correção no final.</p></div></div>
+      <p>Sorteio fechado, no peso da prova do seu cargo. Você só vê a nota e a correção no final.</p></div></div>
+    ${andamento ? `<section class="cartao cartao-ouro" style="margin-bottom:16px;display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center">
+        <div><b>Simulado em andamento</b> ${pilulasSimulado(andamento)}<div class="texto2 pequeno">${Object.keys(andamento.resp || {}).length} de ${SIM_TOTAL} respondidas · começou em ${fmtData(andamento.inicio, true)}</div></div>
+        <div class="botoes"><button class="btn btn-ouro" data-acao="continuar-sim">Continuar</button><button class="btn btn-texto" data-acao="descartar-sim">Descartar</button></div></section>` : ''}
+    <section class="cartao" style="margin-bottom:16px"><h2>Gerar novo simulado</h2>
+      <label class="chk chk-grande"><input type="checkbox" id="sim-reais" ${S.simReais ? 'checked' : ''}><span><b>Só questões reais da FCC</b> <small>(sem as inéditas)</small></span></label>
+      <div class="grade g2" style="margin-top:14px">
+        ${Object.entries(SIMULADOS).map(([k, t]) => `<div class="cartao-sim ${k}">
+          <h3>${esc(t.nome)}</h3>
+          <div class="composicao">${Object.entries(t.comp).map(([m, n]) => `<div><span>${esc(MAT[m].nome)}${SO_TECNICO.includes(m) ? ' ' + seloCargo(m, true) : ''}</span><b>${n}</b></div>`).join('')}</div>
+          ${k === 'tecnico' ? '<p class="texto2 pequeno" style="margin:8px 0 0">Só entram os assuntos do programa do Técnico no edital.</p>' : ''}
+          <button class="btn btn-ouro" style="width:100%;margin-top:12px" data-acao="iniciar-sim" data-tipo="${k}" ${andamento ? 'disabled title="Termine ou descarte o simulado em andamento"' : ''}>Gerar simulado de ${t.curto}</button></div>`).join('')}
+      </div>
+      <p class="texto2 pequeno" style="margin-bottom:0">Em cada matéria, uma questão só volta a aparecer depois que todas as questões daquela matéria já tiverem saído nos seus simulados (nos dois cargos). Aí o ciclo recomeça. Questões anuladas ou desatualizadas não são sorteadas.</p>
+    </section>
     <div class="grade g2">
-      <section class="cartao cartao-ouro"><h2>Novo simulado</h2>
-        <div class="composicao">${Object.entries(SIM_COMP).map(([m, n]) => `<div><span>${esc(MAT[m].nome)}</span><b>${n}</b></div>`).join('')}</div>
-        <p class="texto2 pequeno">Em cada matéria, uma questão só volta a aparecer depois que todas as questões daquela matéria já tiverem saído nos seus simulados. Aí o ciclo recomeça.</p>
-        <div class="botoes">${andamento ? `<button class="btn btn-ouro" data-acao="continuar-sim">Continuar simulado em andamento</button><button class="btn btn-texto" data-acao="descartar-sim">Descartar</button>` : `<button class="btn btn-ouro" data-acao="iniciar-sim">Iniciar simulado</button>`}</div>
-      </section>
-      <section class="cartao"><h2>Ciclo de sorteio</h2>
+      <section class="cartao" style="grid-column:1/-1"><h2>Ciclo de sorteio</h2>
         <div class="barras">${MATS.map(m => {
           const tot = B.questoes.filter(q => q.m === m).length;
           const us = (S.doc.ciclo?.[m] || []).length;
@@ -621,18 +677,18 @@ async function telaSimulados(c, sub) {
         }).join('')}</div></section>
     </div>
     <section class="cartao" style="margin-top:16px"><h2>Histórico de simulados</h2>
-      ${hist.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Data</th><th class="num">Nota</th><th class="num">Acertos</th><th class="num some-cel">Tempo</th><th class="some-cel">Por matéria</th><th></th></tr></thead><tbody>
-      ${hist.map(s => `<tr><td>${fmtData(s.data, true)}</td><td class="num"><b>${(s.acertos / s.total * 10).toFixed(1).replace('.', ',')}</b></td><td class="num">${s.acertos}/${s.total}</td><td class="num some-cel">${fmtTempo(s.tempo)}</td>
+      ${hist.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Data</th><th>Simulado</th><th class="num">Nota</th><th class="num">Acertos</th><th class="num some-cel">Tempo</th><th class="some-cel">Por matéria</th><th></th></tr></thead><tbody>
+      ${hist.map(s => `<tr><td>${fmtData(s.data, true)}</td><td>${pilulasSimulado(s)}</td><td class="num"><b>${(s.acertos / s.total * 10).toFixed(1).replace('.', ',')}</b></td><td class="num">${s.acertos}/${s.total}</td><td class="num some-cel">${fmtTempo(s.tempo)}</td>
         <td class="some-cel">${MATS.map(m => s.porMateria?.[m] ? `<span class="pilula p-neutra" style="margin:2px" title="${esc(MAT[m].nome)}">${esc(MAT[m].curto)} ${s.porMateria[m].a}/${s.porMateria[m].t}</span>` : '').join('')}</td>
         <td><button class="btn btn-peq" data-acao="ver-sim" data-id="${s.id}">Correção</button></td></tr>`).join('')}
       </tbody></table></div>` : '<div class="vazio">Você ainda não fez nenhum simulado.<span class="dica">que tal o primeiro hoje?</span></div>'}
     </section>${rodape()}`;
 }
-async function iniciarSimulado() {
-  const { qids, ciclo } = sortearSimulado();
-  MATS.forEach(m => { S.doc.ciclo[m] = ciclo[m]; });
+async function iniciarSimulado(tipo, soReais) {
+  const { qids, ciclo } = sortearSimulado(tipo, soReais);
+  Object.keys(ciclo).forEach(m => { S.doc.ciclo[m] = ciclo[m]; });
   enfileirar({ r: {}, dias: {}, pcAdd: {}, peAdd: {}, ciclo });
-  S.sim = { qids, resp: {}, i: 0, inicio: Date.now() };
+  S.sim = { qids, resp: {}, i: 0, inicio: Date.now(), tipo, reais: !!soReais };
   salvarSimLocal();
   ir('#/simulados/fazer');
 }
@@ -644,7 +700,7 @@ function telaFazerSimulado(c) {
   const nResp = Object.keys(s.resp).length;
   c.innerHTML = `<div class="sim-layout">
     <div>
-      <div class="q-barra"><h2 style="margin:0">Simulado · ${esc(MAT[q.m].nome)}</h2><span class="texto2">${nResp} de ${SIM_TOTAL} respondidas</span></div>
+      <div class="q-barra"><h2 style="margin:0">Simulado ${SIMULADOS[s.tipo || 'analista'].curto} · ${esc(MAT[q.m].nome)}</h2><span class="texto2">${nResp} de ${SIM_TOTAL} respondidas</span></div>
       ${questaoHTML(q, { num: s.i + 1, total: SIM_TOTAL, marcada: s.resp[q.id] ?? null, respondida: false, modo: 'simulado' })}
       <div class="q-acoes"><div class="navq"><button class="btn" data-acao="sim-nav" data-d="-1" ${s.i === 0 ? 'disabled' : ''}>← Anterior</button>
         <button class="btn" data-acao="sim-nav" data-d="1" ${s.i === SIM_TOTAL - 1 ? 'disabled' : ''}>Próxima →</button></div>
@@ -675,7 +731,7 @@ async function finalizarSimulado() {
   });
   registrarRespostas(s.qids.filter(id => s.resp[id] != null).map(id => ({ id, alt: s.resp[id] })));
   limparRiscos(s.qids);
-  const dados = { data: Date.now(), acertos, total: SIM_TOTAL, tempo, porMateria, qids: s.qids, resp: s.qids.map(id => s.resp[id] ?? -1) };
+  const dados = { data: Date.now(), acertos, total: SIM_TOTAL, tempo, porMateria, qids: s.qids, resp: s.qids.map(id => s.resp[id] ?? -1), tipo: s.tipo || 'analista', reais: !!s.reais };
   gaEvento('simulado_concluido', { acertos });
   try {
     const sid = await S.backend.salvarSimulado(dados);
@@ -696,7 +752,7 @@ async function telaVerSimulado(c, sid) {
   const soErr = S.simSoErradas;
   const itens = s.qids.map((id, k) => ({ id, k, alt: s.resp[k] === -1 ? null : s.resp[k] })).filter(x => Q[x.id]);
   const lista = soErr ? itens.filter(x => x.alt !== Q[x.id].g) : itens;
-  c.innerHTML = `<div class="cabecalho-pagina"><div><h1>Simulado de <span class="marca">${fmtData(s.data, true)}</span></h1><p>Tempo: ${fmtTempo(s.tempo)}</p></div>
+  c.innerHTML = `<div class="cabecalho-pagina"><div><h1>Simulado de <span class="marca">${fmtData(s.data, true)}</span></h1><p>${pilulasSimulado(s)} · Tempo: ${fmtTempo(s.tempo)}</p></div>
       <div class="botoes"><button class="btn" data-acao="voltar-sims">← Simulados</button></div></div>
     <div class="grade g4"><div class="stat ouro"><div class="rot">Nota</div><div class="val">${(s.acertos / s.total * 10).toFixed(1).replace('.', ',')}<small> / 10</small></div></div>
       <div class="stat ok"><div class="rot">Acertos</div><div class="val">${s.acertos}<small> / ${s.total}</small></div></div>
@@ -1117,7 +1173,7 @@ const ACOES = {
   },
   'add-caderno': (el) => escolherCaderno(el.dataset.id),
   // simulados
-  'iniciar-sim': () => iniciarSimulado(),
+  'iniciar-sim': (el) => { S.simReais = !!$('#sim-reais')?.checked; iniciarSimulado(el.dataset.tipo || 'analista', S.simReais); },
   'continuar-sim': () => { S.sim = lerSimLocal(); ir('#/simulados/fazer'); },
   'descartar-sim': async () => { if (await confirmar('Descartar o simulado?', 'As respostas deste simulado em andamento serão perdidas.', 'Descartar', true)) { if (S.sim || lerSimLocal()) limparRiscos((S.sim || lerSimLocal()).qids || []); S.sim = null; apagarSimLocal(); render(); } },
   'sim-nav': (el) => { S.sim.i = Math.min(SIM_TOTAL - 1, Math.max(0, S.sim.i + +el.dataset.d)); salvarSimLocal(); telaFazerSimulado($('#conteudo')); topo(); },
@@ -1286,7 +1342,7 @@ function telaLogin(aba = 'entrar') {
       <div class="wordmark"><img src="img/logo-192.png" width="92" height="92" alt="Logotipo Coisa de Concurseiro"><div><div class="coisa">COISA DE</div><div class="concurseiro">Concurseiro</div></div></div>
       <p class="lema"><b style="color:#E9CD82">Questões</b> · ${esc(SITE.concurso)}<br>Banco gratuito do ${esc(SITE.projeto)}.</p>
       <ul>
-        <li><span class="selo-check">✓</span><span><b>${num(B.questoes.length)} questões</b> comentadas alternativa por alternativa, nos 223 tópicos do edital.</span></li>
+        <li><span class="selo-check">✓</span><span><b>${num(B.questoes.length)} questões</b> comentadas alternativa por alternativa, nos ${TOTAL_TOPICOS} tópicos do edital.</span></li>
         <li><span class="selo-check">✓</span><span><b>Simulados de 40 questões</b> no peso da prova, sem repetir até acabar o banco.</span></li>
         <li><span class="selo-check">✓</span><span><b>Cadernos para imprimir</b> ou salvar em PDF, para responder ou já comentados.</span></li>
         <li><span class="selo-check">✓</span><span><b>Raio-X e ranking</b> para ver onde revisar e acompanhar a turma.</span></li>

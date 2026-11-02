@@ -6,7 +6,7 @@
    com sal, apenas para simular o login.
    ===================================================================== */
 const CHAVE = 'cdc_demo_v1';
-const MATS = ['DTRAB', 'PTRAB', 'DCIV', 'PCIV', 'DADM', 'DCONST'];
+const MATS = ['DTRAB', 'PTRAB', 'DCIV', 'PCIV', 'DADM', 'DCONST', 'ADMPUB'];
 
 function ler() {
   const vazio = () => ({ contas: {}, docs: {}, nomes: {}, ranking: {}, cadernos: {}, simulados: {}, sessao: null });
