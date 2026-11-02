@@ -469,3 +469,15 @@ details.bloco-materia > div { padding: 0 16px 14px; }
 .chk input { width: 18px; height: 18px; min-height: 0; accent-color: var(--ouro); flex: none; margin: 0; }
 .chk small { color: var(--apagado); }
 .btn-aviso { border-color: var(--laranja); color: var(--laranja); }
+
+/* ---------------------------------------------------------------- cargo (Técnico) e simulados por cargo */
+.selo-cargo { display: inline-block; margin: -4px 0 10px; padding: 3px 10px; border-radius: 999px; font-size: .74rem; font-weight: 800; letter-spacing: .03em;
+  color: var(--laranja); background: var(--laranja-bg); border: 1.5px solid color-mix(in srgb, var(--laranja) 55%, transparent); text-transform: uppercase; }
+.selo-cargo.curto { margin: 0 0 0 8px; padding: 1px 8px; font-size: .68rem; vertical-align: middle; }
+.cartao-sim { border: 2px solid var(--borda); border-radius: 18px; padding: 16px; background: var(--cartao2); display: flex; flex-direction: column; }
+.cartao-sim h3 { margin: 0 0 10px; color: var(--ouro); }
+.cartao-sim.tecnico { border-color: color-mix(in srgb, var(--laranja) 45%, var(--borda)); }
+.cartao-sim .composicao { flex: 1; }
+.chk-grande { font-size: 1rem; padding: 10px 14px; border: 2px dashed var(--borda); border-radius: 14px; width: fit-content; }
+.chk-grande input { width: 20px; height: 20px; }
+.cartao-sim .composicao div { background: var(--cartao); }
