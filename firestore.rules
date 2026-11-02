@@ -17,6 +17,7 @@ rules_version = '2';
 //  • Painel do administrador: só a conta com o UID abaixo (ADMIN) lê os dados de todos,
 //    as mensagens e os acessos, e pode bloquear/excluir usuários.
 //  • "Online agora", registro de acessos e mensagens (Fale comigo / Avisar erro).
+//  • Questões anuladas/desatualizadas (avisos/questoes): todos leem, só o ADMIN grava.
 // Limite (explicado no guia): o gabarito está no próprio site, então quem souber
 // programar pode registrar "acertei" de propósito. O teto é 1 ponto por questão.
 // =====================================================================
@@ -211,6 +212,20 @@ service cloud.firestore {
       allow list: if isAdmin();
       allow create: if isAdmin()
         && request.resource.data.keys().hasOnly(['u', 'em'])
+        && request.resource.data.em == request.time;
+      allow delete: if isAdmin();
+    }
+
+    // ---------------------------------------------------------------- questões anuladas / desatualizadas
+    // Um único documento (avisos/questoes) com o mapa q = { 'DTRAB-001': {t, n, em}, ... }.
+    // Todos os usuários logados leem; só o administrador grava.
+    match /avisos/{id} {
+      allow get: if logado();
+      allow list: if false;
+      allow create, update: if isAdmin() && id == 'questoes'
+        && request.resource.data.keys().hasOnly(['q', 'em'])
+        && request.resource.data.q is map
+        && request.resource.data.q.size() <= 2000
         && request.resource.data.em == request.time;
       allow delete: if isAdmin();
     }
