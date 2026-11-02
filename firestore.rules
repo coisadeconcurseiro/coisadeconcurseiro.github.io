@@ -14,13 +14,21 @@ rules_version = '2';
 //  • No máximo 60 primeiras tentativas novas por gravação e uma gravação do progresso
 //    a cada 2 segundos, por usuário.
 //  • Ninguém altera o ranking, o progresso ou os cadernos de outra pessoa.
+//  • Painel do administrador: só a conta com o UID abaixo (ADMIN) lê os dados de todos,
+//    as mensagens e os acessos, e pode bloquear/excluir usuários.
+//  • "Online agora", registro de acessos e mensagens (Fale comigo / Avisar erro).
 // Limite (explicado no guia): o gabarito está no próprio site, então quem souber
 // programar pode registrar "acertei" de propósito. O teto é 1 ponto por questão.
 // =====================================================================
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // >>> Troque pelo UID da conta de administrador (Firebase › Authentication › Usuários)
+    function adminUid() { return 'Jh3g4yNWd6YtSdrCZX3Cz1LfJYh1'; }
+
     function logado() { return request.auth != null; }
+    function isAdmin() { return logado() && request.auth.uid == adminUid(); }
+    function bloqueado() { return exists(/databases/$(database)/documents/bloqueios/$(request.auth.uid)); }
     function dono(uid) { return logado() && request.auth.uid == uid; }
     function mats() { return ['DTRAB', 'PTRAB', 'DCIV', 'PCIV', 'DADM', 'DCONST']; }
     function caminhoUser(uid) { return /databases/$(database)/documents/users/$(uid); }
@@ -38,7 +46,7 @@ service cloud.firestore {
         && nome.matches('^[a-z0-9_.]{3,20}$')
         && getAfter(caminhoUser(request.auth.uid)).data.username.lower() == nome;
       allow update: if false;
-      allow delete: if logado() && resource.data.uid == request.auth.uid;
+      allow delete: if (logado() && resource.data.uid == request.auth.uid) || isAdmin();
     }
 
     // ---------------------------------------------------------------- perfil + progresso
@@ -52,6 +60,7 @@ service cloud.firestore {
         && d.pc == mapasVazios() && d.pe == mapasVazios()
         && d.ciclo == listasVazias()
         && d.zeradoEm == null
+        && !bloqueado()
         && getAfter(/databases/$(database)/documents/usernames/$(d.username.lower())).data.uid == request.auth.uid;
     }
     function soAcrescenta(antes, depois) {
@@ -84,10 +93,10 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read: if dono(uid);
+      allow read: if dono(uid) || isAdmin();
       allow create: if dono(uid) && criacaoUserOk(request.resource.data);
       allow update: if dono(uid) && atualizacaoUserOk(resource.data, request.resource.data);
-      allow delete: if dono(uid);
+      allow delete: if dono(uid) || isAdmin();
 
       // ------------------------------------------------------------ cadernos
       function cadernoOk(d) {
@@ -98,7 +107,7 @@ service cloud.firestore {
           && d.atualizadoEm == request.time;
       }
       match /cadernos/{cid} {
-        allow read, delete: if dono(uid);
+        allow read, delete: if dono(uid) || isAdmin();
         allow create: if dono(uid) && cadernoOk(request.resource.data) && request.resource.data.criadoEm == request.time;
         allow update: if dono(uid) && cadernoOk(request.resource.data) && request.resource.data.criadoEm == resource.data.criadoEm;
       }
@@ -114,7 +123,7 @@ service cloud.firestore {
           && d.criadoEm == request.time;
       }
       match /simulados/{sid} {
-        allow read, delete: if dono(uid);
+        allow read, delete: if dono(uid) || isAdmin();
         allow create: if dono(uid) && simuladoOk(request.resource.data);
         allow update: if false;
       }
@@ -139,7 +148,71 @@ service cloud.firestore {
     match /ranking/{uid} {
       allow read: if logado();
       allow create, update: if dono(uid) && rankingOk(request.resource.data);
-      allow delete: if dono(uid);
+      allow delete: if dono(uid) || isAdmin();
+    }
+
+    // ---------------------------------------------------------------- contagem de simulados (painel)
+    match /{caminho=**}/simulados/{sid} {
+      allow read: if isAdmin();
+    }
+
+    // ---------------------------------------------------------------- online agora (presença)
+    match /presenca/{uid} {
+      allow read: if logado();
+      allow create, update: if dono(uid) && !bloqueado()
+        && request.resource.data.keys().hasOnly(['u', 'em'])
+        && request.resource.data.u is string && request.resource.data.u.size() <= 20
+        && request.resource.data.em == request.time;
+      allow delete: if dono(uid) || isAdmin();
+    }
+
+    // ---------------------------------------------------------------- registro de acessos (1 por pessoa por dia)
+    match /acessos/{id} {
+      allow read, delete: if isAdmin();
+      allow create, update: if logado() && !bloqueado()
+        && request.resource.data.keys().hasOnly(['dia', 'uid', 'u', 'em'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.dia is string
+        && request.resource.data.dia.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && id == request.resource.data.dia + '_' + request.auth.uid
+        && request.resource.data.u is string && request.resource.data.u.size() <= 20
+        && request.resource.data.em == request.time;
+    }
+
+    // ---------------------------------------------------------------- mensagens (Fale comigo / Avisar erro)
+    function camposMsg() { return ['uid', 'u', 'tipo', 'texto', 'qid', 'criadoEm', 'lida', 'resposta', 'respondidaEm', 'vista']; }
+    match /mensagens/{mid} {
+      allow read: if isAdmin() || (logado() && resource.data.uid == request.auth.uid);
+      allow create: if logado() && !bloqueado()
+        && request.resource.data.keys().hasOnly(camposMsg())
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.u is string && request.resource.data.u.size() <= 20
+        && request.resource.data.tipo in ['sugestao', 'solicitacao', 'problema', 'erro', 'outro']
+        && request.resource.data.texto is string
+        && request.resource.data.texto.size() >= 3 && request.resource.data.texto.size() <= 1500
+        && (request.resource.data.qid == null || (request.resource.data.qid is string && request.resource.data.qid.size() <= 12))
+        && request.resource.data.criadoEm == request.time
+        && request.resource.data.lida == false
+        && request.resource.data.resposta == null
+        && request.resource.data.respondidaEm == null
+        && request.resource.data.vista == false;
+      allow update: if (isAdmin()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lida', 'resposta', 'respondidaEm', 'vista'])
+          && (request.resource.data.resposta == null || (request.resource.data.resposta is string && request.resource.data.resposta.size() <= 1500)))
+        || (logado() && resource.data.uid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['vista'])
+          && request.resource.data.vista == true);
+      allow delete: if isAdmin();
+    }
+
+    // ---------------------------------------------------------------- usuários bloqueados
+    match /bloqueios/{uid} {
+      allow get: if dono(uid) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['u', 'em'])
+        && request.resource.data.em == request.time;
+      allow delete: if isAdmin();
     }
 
     // qualquer outro caminho: bloqueado
