@@ -135,9 +135,10 @@ def parse(code, name, f):
     return f,topics,qs
 
 NOMES = {'Direito do Trabalho': 'DTRAB', 'Direito Processual do Trabalho': 'PTRAB', 'Direito Civil': 'DCIV',
-         'Direito Processual Civil': 'PCIV', 'Direito Administrativo': 'DADM', 'Direito Constitucional': 'DCONST'}
-CURTO = {'DTRAB': 'D. Trabalho', 'PTRAB': 'Proc. Trabalho', 'DCIV': 'D. Civil', 'PCIV': 'Proc. Civil', 'DADM': 'D. Administrativo', 'DCONST': 'D. Constitucional'}
-ORDEM = ['DTRAB', 'PTRAB', 'DCIV', 'PCIV', 'DADM', 'DCONST']
+         'Direito Processual Civil': 'PCIV', 'Direito Administrativo': 'DADM', 'Direito Constitucional': 'DCONST',
+         'Noções de Administração Pública': 'ADMPUB'}
+CURTO = {'DTRAB': 'D. Trabalho', 'PTRAB': 'Proc. Trabalho', 'DCIV': 'D. Civil', 'PCIV': 'Proc. Civil', 'DADM': 'D. Administrativo', 'DCONST': 'D. Constitucional', 'ADMPUB': 'Adm. Pública'}
+ORDEM = ['DTRAB', 'PTRAB', 'DCIV', 'PCIV', 'DADM', 'DCONST', 'ADMPUB']
 
 def norm_orgao(o):
     o = o.replace('‑', '-')
@@ -163,8 +164,9 @@ def registro(q, code):
     rec = dict(m=code, tp=q['topic'], o=o, r=1 if real else 0)
     if real:
         p = o.split(' · ')
-        if len(p) >= 4 and p[2].strip().isdigit():
-            rec['org'] = norm_orgao(p[1]); rec['ano'] = int(p[2]); rec['cargo'] = ' · '.join(p[3:])
+        if len(p) >= 3 and p[2].strip().isdigit():   # FCC · órgão · ano [· cargo] (alguns cadernos não trazem o cargo)
+            rec['org'] = norm_orgao(p[1]); rec['ano'] = int(p[2])
+            if len(p) >= 4: rec['cargo'] = ' · '.join(p[3:])
     rec['e'] = [[b['r'], b['t']] if b['k'] == 'item' else b['t'] for b in q['blocks']]
     rec['a'] = [q['alts'][k] for k in 'ABCDE']
     rec['g'] = 'ABCDE'.index(q['gab'])
@@ -213,7 +215,8 @@ def main():
                 del por_id[qid]; removidos += 1
         ausentes = len([k for k in por_id if k.startswith(code + '-') and k not in vistos])
         relatorio.append(f'{nome}: {len(qs)} no PDF · {mantidos} mantidas com o mesmo código · {novos} novas · {removidos} removidas · {ausentes} antigas fora deste PDF (mantidas)')
-    qs = sorted(por_id.values(), key=lambda r: (ORDEM.index(r['m']), int(r['id'].rsplit('-', 1)[1])))
+    # ordem do banco: matéria › tópico do edital › código (as questões novas ficam junto das antigas do mesmo tópico)
+    qs = sorted(por_id.values(), key=lambda r: (ORDEM.index(r['m']), int(r['tp']), int(r['id'].rsplit('-', 1)[1])))
     out = dict(versao=datetime.date.today().isoformat(), materias=[mats[m] for m in ORDEM if m in mats], questoes=qs)
     js = '/* Banco de questões – gerado a partir dos cadernos comentados. Não edite à mão; veja ATUALIZAR_BANCO.md */\nwindow.BANCO = ' + json.dumps(out, ensure_ascii=False, separators=(',', ':')) + ';\n'
     open(a.banco, 'w', encoding='utf-8').write(js)
