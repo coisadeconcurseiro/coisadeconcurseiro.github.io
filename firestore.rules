@@ -11,8 +11,10 @@ rules_version = '2';
 //    dele (pc = acertou de primeira, pe = errou de primeira): pontos = tamanho de pc.
 //  • Esse registro só cresce: não dá para apagar nem trocar uma primeira tentativa
 //    (zerar o histórico não devolve pontos), e uma questão não pode estar em pc e pe.
-//  • No máximo 60 primeiras tentativas novas por gravação e uma gravação do progresso
-//    a cada 2 segundos, por usuário.
+//  • No máximo 60 primeiras tentativas novas por matéria em cada gravação e uma gravação
+//    do progresso a cada 2 segundos, por usuário.
+//  • Para caber no limite de 1.000 verificações por gravação do Firebase, só as matérias
+//    que mudaram são conferidas (affectedKeys), e os valores repetidos ficam em "let".
 //  • Ninguém altera o ranking, o progresso ou os cadernos de outra pessoa.
 //  • Painel do administrador: só a conta com o UID abaixo (ADMIN) lê os dados de todos,
 //    as mensagens e os acessos, e pode bloquear/excluir usuários.
@@ -69,21 +71,26 @@ service cloud.firestore {
         && !bloqueado()
         && getAfter(/databases/$(database)/documents/usernames/$(d.username.lower())).data.uid == request.auth.uid;
     }
-    function soAcrescenta(antes, depois) {
-      return depois.diff(antes).removedKeys().size() == 0
-        && depois.diff(antes).changedKeys().size() == 0;
-    }
-    // get(m, {}): a matéria pode ainda não existir no documento (contas antigas e ADMPUB)
+    // Confere UMA matéria que mudou. get(m, {}): a matéria pode ainda não existir no
+    // documento (contas antigas e ADMPUB).
+    //  • pc e pe só crescem (nada é apagado nem trocado);
+    //  • uma questão não pode estar em pc e pe ao mesmo tempo;
+    //  • no máximo 60 primeiras tentativas novas nesta matéria por gravação.
     function materiaOk(a, d, m) {
-      return d.pc.get(m, {}) is map && d.pe.get(m, {}) is map
-        && soAcrescenta(a.pc.get(m, {}), d.pc.get(m, {}))
-        && soAcrescenta(a.pe.get(m, {}), d.pe.get(m, {}))
-        && d.pc.get(m, {}).keys().toSet().intersection(d.pe.get(m, {}).keys().toSet()).size() == 0;
-    }
-    function novas(a, d, m) {
-      return (d.pc.get(m, {}).size() - a.pc.get(m, {}).size()) + (d.pe.get(m, {}).size() - a.pe.get(m, {}).size());
+      let ap = a.pc.get(m, {});
+      let dp = d.pc.get(m, {});
+      let ae = a.pe.get(m, {});
+      let de = d.pe.get(m, {});
+      let dpd = dp.diff(ap);
+      let ded = de.diff(ae);
+      return dp is map && de is map
+        && dpd.removedKeys().size() == 0 && dpd.changedKeys().size() == 0
+        && ded.removedKeys().size() == 0 && ded.changedKeys().size() == 0
+        && !(dp.keys().hasAny(de.keys()))
+        && dpd.addedKeys().size() + ded.addedKeys().size() <= 60;
     }
     function atualizacaoUserOk(a, d) {
+      let mud = d.pc.diff(a.pc).affectedKeys().union(d.pe.diff(a.pe).affectedKeys());
       return d.keys().hasOnly(camposUser())
         && d.username == a.username
         && d.criadoEm == a.criadoEm
@@ -93,12 +100,13 @@ service cloud.firestore {
         && d.r is map && d.dias is map && d.ciclo is map
         && d.pc.keys().hasOnly(mats()) && d.pe.keys().hasOnly(mats())
         && d.pc.keys().hasAll(matsBase()) && d.pe.keys().hasAll(matsBase())
-        && materiaOk(a, d, 'DTRAB') && materiaOk(a, d, 'PTRAB') && materiaOk(a, d, 'DCIV')
-        && materiaOk(a, d, 'PCIV') && materiaOk(a, d, 'DADM') && materiaOk(a, d, 'DCONST')
-        && materiaOk(a, d, 'ADMPUB')
-        && novas(a, d, 'DTRAB') + novas(a, d, 'PTRAB') + novas(a, d, 'DCIV')
-           + novas(a, d, 'PCIV') + novas(a, d, 'DADM') + novas(a, d, 'DCONST')
-           + novas(a, d, 'ADMPUB') <= 60;
+        && (!('DTRAB' in mud) || materiaOk(a, d, 'DTRAB'))
+        && (!('PTRAB' in mud) || materiaOk(a, d, 'PTRAB'))
+        && (!('DCIV' in mud) || materiaOk(a, d, 'DCIV'))
+        && (!('PCIV' in mud) || materiaOk(a, d, 'PCIV'))
+        && (!('DADM' in mud) || materiaOk(a, d, 'DADM'))
+        && (!('DCONST' in mud) || materiaOk(a, d, 'DCONST'))
+        && (!('ADMPUB' in mud) || materiaOk(a, d, 'ADMPUB'));
     }
 
     match /users/{uid} {
@@ -142,8 +150,8 @@ service cloud.firestore {
 
     // ---------------------------------------------------------------- ranking (leitura para quem está logado)
     function contaOk(d, u, m) {
-      return d.pts.get(m, 0) == u.pc.get(m, {}).size()
-        && d.resp.get(m, 0) == u.pc.get(m, {}).size() + u.pe.get(m, {}).size();
+      let p = u.pc.get(m, {}).size();
+      return d.pts.get(m, 0) == p && d.resp.get(m, 0) == p + u.pe.get(m, {}).size();
     }
     function rankingOk(d) {
       let u = getAfter(caminhoUser(request.auth.uid)).data;
@@ -151,13 +159,12 @@ service cloud.firestore {
         && d.u == u.username
         && d.em == request.time
         && d.pts.keys().hasOnly(mats()) && d.resp.keys().hasOnly(mats())
+        && d.pts.keys().hasAll(matsBase()) && d.resp.keys().hasAll(matsBase())
         && contaOk(d, u, 'DTRAB') && contaOk(d, u, 'PTRAB') && contaOk(d, u, 'DCIV')
         && contaOk(d, u, 'PCIV') && contaOk(d, u, 'DADM') && contaOk(d, u, 'DCONST')
         && contaOk(d, u, 'ADMPUB')
-        && d.total == d.pts.get('DTRAB', 0) + d.pts.get('PTRAB', 0) + d.pts.get('DCIV', 0) + d.pts.get('PCIV', 0)
-           + d.pts.get('DADM', 0) + d.pts.get('DCONST', 0) + d.pts.get('ADMPUB', 0)
-        && d.totalResp == d.resp.get('DTRAB', 0) + d.resp.get('PTRAB', 0) + d.resp.get('DCIV', 0) + d.resp.get('PCIV', 0)
-           + d.resp.get('DADM', 0) + d.resp.get('DCONST', 0) + d.resp.get('ADMPUB', 0);
+        && d.total == d.pts.DTRAB + d.pts.PTRAB + d.pts.DCIV + d.pts.PCIV + d.pts.DADM + d.pts.DCONST + d.pts.get('ADMPUB', 0)
+        && d.totalResp == d.resp.DTRAB + d.resp.PTRAB + d.resp.DCIV + d.resp.PCIV + d.resp.DADM + d.resp.DCONST + d.resp.get('ADMPUB', 0);
     }
     match /ranking/{uid} {
       allow read: if logado();
