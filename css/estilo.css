@@ -433,3 +433,39 @@ details.bloco-materia > div { padding: 0 16px 14px; }
   .tabela .some-cel { display: none; }
   .login-caixa { padding: 22px 18px; }
 }
+
+/* ---------------------------------------------------------------- tesoura (riscar alternativa) */
+.alternativas li.com-tesoura { display: grid; grid-template-columns: 34px 1fr; gap: 8px; align-items: center; }
+.tesoura {
+  width: 34px; height: 34px; padding: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
+  background: transparent; border: 1.5px dashed var(--borda); color: var(--apagado); opacity: .7;
+  transition: opacity .12s, color .12s, border-color .12s, background .12s;
+}
+.alternativas li:hover .tesoura, .tesoura:focus-visible { opacity: 1; color: var(--texto2); border-color: var(--texto2); }
+.tesoura:hover { color: var(--ouro) !important; border-color: var(--ouro) !important; border-style: solid; }
+.tesoura.ativa { opacity: 1; color: var(--verm); border: 1.5px solid var(--verm); background: var(--verm-bg); }
+.alt.riscada { border-style: dashed; }
+.alt.riscada .letra { opacity: .5; }
+@media (max-width: 560px) {
+  .alternativas li.com-tesoura { grid-template-columns: 30px 1fr; gap: 6px; }
+  .tesoura { width: 30px; height: 30px; opacity: .85; }
+}
+
+/* ---------------------------------------------------------------- questão anulada / desatualizada */
+.aviso-q {
+  display: flex; gap: 12px; align-items: flex-start; margin: 0 0 14px; padding: 12px 14px; border-radius: 14px;
+  border: 2px solid var(--verm); background: var(--verm-bg); color: var(--texto);
+}
+.aviso-q b { display: block; font-family: 'Fredoka'; font-weight: 600; font-size: 1.05rem; color: var(--verm); text-transform: uppercase; letter-spacing: .03em; }
+.aviso-q span:not(.aviso-ic) { display: block; font-size: .93rem; line-height: 1.45; }
+.aviso-q .aviso-ic { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--verm); color: #fff; font-weight: 900; font-family: 'Fredoka'; }
+.aviso-q.aviso-desatualizada { border-color: var(--laranja); background: var(--laranja-bg); }
+.aviso-q.aviso-desatualizada b { color: var(--laranja); }
+.aviso-q.aviso-desatualizada .aviso-ic { background: var(--laranja); }
+
+/* filtros: excluir questões com aviso */
+.excluir-ops { display: grid; gap: 6px; }
+.chk { display: flex; gap: 8px; align-items: center; cursor: pointer; font-size: .93rem; }
+.chk input { width: 18px; height: 18px; min-height: 0; accent-color: var(--ouro); flex: none; margin: 0; }
+.chk small { color: var(--apagado); }
+.btn-aviso { border-color: var(--laranja); color: var(--laranja); }
