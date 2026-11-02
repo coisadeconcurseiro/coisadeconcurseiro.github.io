@@ -210,6 +210,12 @@ export function criarBackendFirebase(config) {
       await b.commit();
     },
     async admDesbloquear(uid) { await deleteDoc(doc(db, 'bloqueios', uid)); },
+    /* ---------------- questões anuladas / desatualizadas ---------------- */
+    async avisosQuestoes() {
+      const s = await getDoc(doc(db, 'avisos', 'questoes'));
+      return s.exists() ? (s.data().q || {}) : {};
+    },
+    async admSalvarAvisos(q) { await setDoc(doc(db, 'avisos', 'questoes'), { q, em: serverTimestamp() }); },
 
     async excluirConta(senha) {
       const u = auth.currentUser;

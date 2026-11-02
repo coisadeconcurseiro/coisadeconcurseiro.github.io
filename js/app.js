@@ -26,7 +26,8 @@ const S = {
   cadernos: null, simulados: null, rank: null, rankEm: 0,
   filtros: {}, pratica: null, sim: null, simTimer: null,
   fila: null, gravando: false, ultimaGravacao: 0, timerFila: null,
-  rankAba: 'geral'
+  rankAba: 'geral',
+  avisos: {}, riscos: null
 };
 
 /* ------------------------------------------------------------------ utilidades */
@@ -199,8 +200,72 @@ function registrarRespostas(lista) {
   enfileirar(patch);
 }
 
+/* ------------------------------------------------------------------ questões anuladas / desatualizadas
+   O administrador marca no painel; fica no Firestore em avisos/questoes.
+   q = { 'DTRAB-001': { t: 'anulada' | 'desatualizada', n: 'nota', em: ms } } */
+const TIPOS_AVISO = { anulada: 'Anulada', desatualizada: 'Desatualizada' };
+const TEXTO_AVISO = {
+  anulada: 'Esta questão foi anulada. Ela continua aqui só para estudo.',
+  desatualizada: 'A lei ou a jurisprudência mudou depois desta questão. O gabarito pode não valer mais.'
+};
+const avisoDe = id => { const a = S.avisos?.[id]; return a && TIPOS_AVISO[a.t] ? a : null; };
+function contarAvisos(t) { return Object.keys(S.avisos || {}).filter(id => Q[id] && avisoDe(id)?.t === t).length; }
+function faixaAviso(q) {
+  const a = avisoDe(q.id); if (!a) return '';
+  return `<div class="aviso-q aviso-${a.t}" role="note"><span class="aviso-ic">!</span><div>
+    <b>Questão ${a.t === 'anulada' ? 'anulada' : 'desatualizada'}</b>
+    <span>${esc(a.n || TEXTO_AVISO[a.t])}</span></div></div>`;
+}
+function pilulaAviso(id) {
+  const a = avisoDe(id); if (!a) return '';
+  return `<span class="pilula ${a.t === 'anulada' ? 'p-errada' : 'p-fcc-cobra'}" title="${esc(a.n || TEXTO_AVISO[a.t])}">${a.t === 'anulada' ? 'ANULADA' : 'DESATUALIZADA'}</span>`;
+}
+async function carregarAvisos() {
+  try { S.avisos = await S.backend.avisosQuestoes() || {}; } catch (e) { console.warn('avisos', e); }
+}
+async function salvarAviso(qid, aviso) {
+  const novo = { ...(await S.backend.avisosQuestoes() || {}) };   // parte sempre da versão do servidor
+  if (aviso) novo[qid] = aviso; else delete novo[qid];
+  await S.backend.admSalvarAvisos(novo);
+  S.avisos = novo;
+}
+
+/* ------------------------------------------------------------------ tesoura: riscar alternativas
+   Fica guardado só neste navegador (localStorage), por usuário: { qid: [k, ...] }.
+   Os riscos de uma questão somem quando ela é respondida. */
+function chaveRiscos() { return 'cdc_riscos_' + (S.user?.uid || 'x'); }
+function lerRiscos() {
+  if (!S.riscos) { try { S.riscos = JSON.parse(localStorage.getItem(chaveRiscos())) || {}; } catch (e) { S.riscos = {}; } }
+  return S.riscos;
+}
+function gravarRiscos() { try { localStorage.setItem(chaveRiscos(), JSON.stringify(S.riscos || {})); } catch (e) { } }
+function riscosDe(id) { return lerRiscos()[id] || []; }
+function definirRisco(id, k, riscar) {
+  const r = lerRiscos();
+  const s = new Set(r[id] || []);
+  if (riscar) s.add(k); else s.delete(k);
+  if (s.size) r[id] = [...s].sort(); else delete r[id];
+  gravarRiscos();
+}
+function limparRiscos(ids) {
+  const r = lerRiscos(); let mudou = false;
+  ids.forEach(id => { if (r[id]) { delete r[id]; mudou = true; } });
+  if (mudou) gravarRiscos();
+}
+function pintarRisco(art, k, riscada) {
+  const b = $(`.tesoura[data-alt="${k}"]`, art), a = $(`.alt[data-alt="${k}"]`, art);
+  if (a) a.classList.toggle('riscada', riscada);
+  if (b) {
+    b.classList.toggle('ativa', riscada); b.setAttribute('aria-pressed', riscada);
+    const t = riscada ? `Desfazer o risco da alternativa ${LETRAS[k]}` : `Riscar a alternativa ${LETRAS[k]}`;
+    b.title = t; b.setAttribute('aria-label', t);
+  }
+}
+const IC_TESOURA = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/></svg>';
+
 /* ------------------------------------------------------------------ filtros */
-function filtrosPadrao() { return { mats: [], tops: [], origem: 'todas', orgs: [], anos: [], situacao: 'todas', qtd: '20', ordem: 'banco' }; }
+function prefExcluir() { try { return JSON.parse(localStorage.getItem('cdc_excluir')) || {}; } catch (e) { return {}; } }
+function filtrosPadrao() { const p = prefExcluir(); return { mats: [], tops: [], origem: 'todas', orgs: [], anos: [], situacao: 'todas', qtd: '20', ordem: 'banco', semAnul: !!p.semAnul, semDesat: !!p.semDesat }; }
 function situacaoDe(id) {
   const r = S.doc?.r?.[id];
   if (!r) return 'nao';
@@ -215,6 +280,10 @@ function aplicarFiltros(f) {
     if (f.orgs.length && !f.orgs.includes(q.org)) return false;
     if (f.anos.length && !f.anos.includes(q.ano)) return false;
     if (f.situacao !== 'todas' && situacaoDe(q.id) !== f.situacao) return false;
+    if (f.semAnul || f.semDesat) {
+      const a = avisoDe(q.id);
+      if (a && ((f.semAnul && a.t === 'anulada') || (f.semDesat && a.t === 'desatualizada'))) return false;
+    }
     return true;
   }).map(q => q.id);
 }
@@ -250,6 +319,10 @@ function filtrosHTML(chave, { situacao = true, extras = true } = {}) {
     ${situacao ? sel('situacao', 'Situação', [['todas', 'Todas'], ['nao', 'Não resolvidas'], ['acertei', 'Acertei'], ['errei', 'Errei']]) : ''}
     ${extras ? sel('qtd', 'Quantidade', [['10', '10 questões'], ['20', '20 questões'], ['30', '30 questões'], ['50', '50 questões'], ['100', '100 questões'], ['todas', 'Todas as encontradas']]) : ''}
     ${extras ? sel('ordem', 'Ordem', [['banco', 'Ordem do banco'], ['aleatoria', 'Aleatória']]) : ''}
+    <div class="campo"><span>Questões com aviso</span><div class="excluir-ops">
+      <label class="chk"><input type="checkbox" data-fb="semAnul" ${f.semAnul ? 'checked' : ''}><span>Excluir as anuladas <small>(${contarAvisos('anulada')})</small></span></label>
+      <label class="chk"><input type="checkbox" data-fb="semDesat" ${f.semDesat ? 'checked' : ''}><span>Excluir as desatualizadas <small>(${contarAvisos('desatualizada')})</small></span></label>
+    </div></div>
   </div>`;
 }
 function atualizarContagem(chave) {
@@ -275,6 +348,9 @@ function aoMudarFiltro(ev) {
     }
   } else if (ev.target.matches('select[data-f]')) {
     f[ev.target.dataset.f] = ev.target.value;
+  } else if (ev.target.matches('input[data-fb]')) {
+    f[ev.target.dataset.fb] = ev.target.checked;
+    try { localStorage.setItem('cdc_excluir', JSON.stringify({ semAnul: !!f.semAnul, semDesat: !!f.semDesat })); } catch (e) { }
   }
   atualizarContagem(chave);
 }
@@ -331,12 +407,16 @@ function correcaoHTML(q, marcada) {
 function questaoHTML(q, { num, total, marcada = null, respondida = false, modo = 'pratica' }) {
   const ok = respondida && marcada === q.g;
   const r = S.doc?.r?.[q.id];
+  const tesoura = !respondida;              // dá para riscar enquanto a questão não foi corrigida
+  const riscos = tesoura ? riscosDe(q.id) : [];
   let alts = '<ol class="alternativas">';
   q.a.forEach((t, k) => {
     let cls = '';
     if (respondida) { if (k === q.g) cls = 'certa'; else if (k === marcada) cls = 'errada'; }
     else if (k === marcada) cls = 'marcada';
-    alts += `<li><button type="button" class="alt ${cls}" data-acao="marcar" data-alt="${k}" ${respondida ? 'disabled' : ''} aria-pressed="${k === marcada}">
+    const risc = riscos.includes(k);
+    const rot = risc ? `Desfazer o risco da alternativa ${LETRAS[k]}` : `Riscar a alternativa ${LETRAS[k]}`;
+    alts += `<li${tesoura ? ' class="com-tesoura"' : ''}>${tesoura ? `<button type="button" class="tesoura ${risc ? 'ativa' : ''}" data-acao="riscar" data-alt="${k}" title="${rot}" aria-label="${rot}" aria-pressed="${risc}">${IC_TESOURA}</button>` : ''}<button type="button" class="alt ${cls} ${risc ? 'riscada' : ''}" data-acao="marcar" data-alt="${k}" ${respondida ? 'disabled' : ''} aria-pressed="${k === marcada}">
       <span class="letra">${LETRAS[k]}</span><span class="txt">${esc(t)}</span></button></li>`;
   });
   alts += '</ol>';
@@ -345,6 +425,7 @@ function questaoHTML(q, { num, total, marcada = null, respondida = false, modo =
   return `<article class="questao ${respondida ? (ok ? 'acertou' : 'errou') : ''}" data-qid="${q.id}">
     <div class="q-cab"><span class="q-num">Questão ${num}${total ? ` <span class="apagado" style="font-size:.85rem">de ${total}</span>` : ''}</span>${pilulaOrigem(q)}${historico}<span class="q-cod">${q.id}</span></div>
     <div class="q-topico">${esc(MAT[q.m].nome)} · <b>${q.tp}. ${esc(TOP[q.m + ':' + q.tp])}</b></div>
+    ${faixaAviso(q)}
     ${enunciadoHTML(q)}
     ${alts}
     ${respondida && modo !== 'simulado' ? `<div class="resultado ${ok ? 'ok' : 'nok'}"><span class="ic"><span>${ok ? '✓' : '✗'}</span></span>${ok ? 'Você acertou!' : (marcada == null ? `Sem resposta. Gabarito: ${LETRAS[q.g]}` : `Você errou. Gabarito: ${LETRAS[q.g]}`)}</div>` : ''}
@@ -499,7 +580,7 @@ function apagarSimLocal() { try { localStorage.removeItem(chaveSim()); } catch (
 function sortearSimulado() {
   const ciclo = {}, qids = [];
   for (const [m, n] of Object.entries(SIM_COMP)) {
-    const todos = B.questoes.filter(q => q.m === m).map(q => q.id);
+    const todos = B.questoes.filter(q => q.m === m && !avisoDe(q.id)).map(q => q.id);   // anuladas e desatualizadas não entram
     const usados = new Set((S.doc.ciclo?.[m] || []).filter(id => Q[id]));
     const disp = todos.filter(id => !usados.has(id));
     let esc_;
@@ -593,6 +674,7 @@ async function finalizarSimulado() {
     if (s.resp[id] === q.g) { porMateria[q.m].a++; acertos++; }
   });
   registrarRespostas(s.qids.filter(id => s.resp[id] != null).map(id => ({ id, alt: s.resp[id] })));
+  limparRiscos(s.qids);
   const dados = { data: Date.now(), acertos, total: SIM_TOTAL, tempo, porMateria, qids: s.qids, resp: s.qids.map(id => s.resp[id] ?? -1) };
   gaEvento('simulado_concluido', { acertos });
   try {
@@ -690,7 +772,7 @@ function telaCaderno(c, cid) {
       ${removidas ? `<p class="pequeno" style="color:var(--laranja)">${removidas} questão(ões) deste caderno não existem mais no banco e foram ignoradas.</p>` : ''}</section>
     <section class="cartao" style="margin-top:16px"><h2>Questões do caderno</h2>
       ${ids.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>#</th><th>Código</th><th>Assunto</th><th class="some-cel">Origem</th><th>Situação</th><th></th></tr></thead><tbody>
-      ${ids.map((id, k) => { const q = Q[id]; const s = situacaoDe(id); return `<tr><td class="pos">${k + 1}</td><td><b>${id}</b></td><td class="pequeno">${esc(MAT[q.m].curto)} · ${q.tp}. ${esc(TOP[q.m + ':' + q.tp])}</td><td class="some-cel">${q.r ? `<span class="pilula p-fcc">${esc(q.org)} · ${q.ano}</span>` : '<span class="pilula p-inedita">Inédita</span>'}</td>
+      ${ids.map((id, k) => { const q = Q[id]; const s = situacaoDe(id); return `<tr><td class="pos">${k + 1}</td><td><b>${id}</b>${avisoDe(id) ? ' ' + pilulaAviso(id) : ''}</td><td class="pequeno">${esc(MAT[q.m].curto)} · ${q.tp}. ${esc(TOP[q.m + ':' + q.tp])}</td><td class="some-cel">${q.r ? `<span class="pilula p-fcc">${esc(q.org)} · ${q.ano}</span>` : '<span class="pilula p-inedita">Inédita</span>'}</td>
         <td>${s === 'nao' ? '<span class="apagado pequeno">não resolvida</span>' : `<span class="pilula ${s === 'acertei' ? 'p-certa' : 'p-errada'}">${s === 'acertei' ? 'acertei' : 'errei'}</span>`}</td>
         <td><button class="btn btn-texto btn-peq" data-acao="remover-do-caderno" data-id="${cid}" data-q="${id}" title="Remover do caderno">✕</button></td></tr>`; }).join('')}
       </tbody></table></div>` : '<div class="vazio">Este caderno está vazio. Use “+ Adicionar questões”.</div>'}
@@ -776,6 +858,8 @@ async function imprimirCaderno(cad, formato) {
     for (let n = g.ini; n <= g.fim; n++) {
       const q = Q[ids[n - 1]]; k++;
       let h = `<div class="pr-q"><div class="pr-q-cab"><b>Questão ${n}</b><span class="pr-tag ${q.r ? '' : 'ined'}">${esc(q.o)}</span></div>`;
+      const av = avisoDe(q.id);
+      if (av) h += `<div class="pr-aviso" style="border:1.5pt solid #B9302A;border-radius:6px;padding:4px 8px;margin:4px 0 6px;font-size:9pt;color:#7A1F1A"><b>Questão ${av.t === 'anulada' ? 'anulada' : 'desatualizada'}:</b> ${esc(av.n || TEXTO_AVISO[av.t])}</div>`;
       let itens = '';
       const desc = () => { if (itens) { h += `<div class="pr-itens">${itens}</div>`; itens = ''; } };
       q.e.forEach(b => { if (Array.isArray(b)) itens += `<div class="pr-item"><b>${esc(b[0])}</b><span>${esc(b[1])}</span></div>`; else { desc(); h += `<p>${esc(b)}</p>`; } });
@@ -981,12 +1065,14 @@ const ACOES = {
   'marcar': (el) => {
     const art = el.closest('[data-qid]'); const id = art.dataset.qid; const alt = +el.dataset.alt;
     if (location.hash.startsWith('#/simulados/fazer')) {
-      if (S.sim.resp[id] === alt) delete S.sim.resp[id]; else S.sim.resp[id] = alt;
+      if (S.sim.resp[id] === alt) delete S.sim.resp[id];
+      else { S.sim.resp[id] = alt; definirRisco(id, alt, false); }   // marcar desfaz o risco
       salvarSimLocal(); telaFazerSimulado($('#conteudo'));
       return;
     }
     const p = S.pratica; if (!p || p.resp[id]) return;
     p.marc[id] = p.marc[id] === alt ? null : alt;
+    if (p.marc[id] === alt && riscosDe(id).includes(alt)) { definirRisco(id, alt, false); pintarRisco(art, alt, false); }
     $$('.alt', art).forEach(b => { const k = +b.dataset.alt; b.classList.toggle('marcada', k === p.marc[id]); b.setAttribute('aria-pressed', k === p.marc[id]); });
     const r = $('[data-acao="responder"]'); if (r) r.disabled = p.marc[id] == null;
   },
@@ -995,10 +1081,29 @@ const ACOES = {
     if (alt == null) return;
     const ok = alt === Q[id].g;
     p.resp[id] = { alt, ok };
+    limparRiscos([id]);
     registrarRespostas([{ id, alt }]);
     gaEvento('questao_respondida', { materia: Q[id].m, acertou: ok ? 'sim' : 'nao' });
     telaResolver($('#conteudo'));
     $('.resultado')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  },
+  'riscar': (el) => {
+    const art = el.closest('[data-qid]'); const id = art.dataset.qid; const k = +el.dataset.alt;
+    const riscar = !riscosDe(id).includes(k);
+    definirRisco(id, k, riscar);
+    pintarRisco(art, k, riscar);
+    if (!riscar) return;
+    // riscar a alternativa que estava marcada desfaz a marcação
+    if (location.hash.startsWith('#/simulados/fazer')) {
+      if (S.sim?.resp[id] === k) { delete S.sim.resp[id]; salvarSimLocal(); telaFazerSimulado($('#conteudo')); }
+      return;
+    }
+    const p = S.pratica;
+    if (p && !p.resp[id] && p.marc[id] === k) {
+      p.marc[id] = null;
+      const a = $(`.alt[data-alt="${k}"]`, art); a.classList.remove('marcada'); a.setAttribute('aria-pressed', false);
+      const r = $('[data-acao="responder"]'); if (r) r.disabled = true;
+    }
   },
   'nav': (el) => { const p = S.pratica; p.i = Math.min(p.ids.length - 1, Math.max(0, p.i + +el.dataset.d)); telaResolver($('#conteudo')); topo(); },
   'encerrar-pratica': () => { if (!Object.keys(S.pratica.resp).length) { S.pratica = null; return ir('#/questoes'); } resultadoPratica(); },
@@ -1014,7 +1119,7 @@ const ACOES = {
   // simulados
   'iniciar-sim': () => iniciarSimulado(),
   'continuar-sim': () => { S.sim = lerSimLocal(); ir('#/simulados/fazer'); },
-  'descartar-sim': async () => { if (await confirmar('Descartar o simulado?', 'As respostas deste simulado em andamento serão perdidas.', 'Descartar', true)) { S.sim = null; apagarSimLocal(); render(); } },
+  'descartar-sim': async () => { if (await confirmar('Descartar o simulado?', 'As respostas deste simulado em andamento serão perdidas.', 'Descartar', true)) { if (S.sim || lerSimLocal()) limparRiscos((S.sim || lerSimLocal()).qids || []); S.sim = null; apagarSimLocal(); render(); } },
   'sim-nav': (el) => { S.sim.i = Math.min(SIM_TOTAL - 1, Math.max(0, S.sim.i + +el.dataset.d)); salvarSimLocal(); telaFazerSimulado($('#conteudo')); topo(); },
   'sim-ir': (el) => { S.sim.i = +el.dataset.k; salvarSimLocal(); telaFazerSimulado($('#conteudo')); topo(); },
   'sim-finalizar': () => finalizarSimulado(),
@@ -1309,6 +1414,7 @@ async function atualizarSelos() {
     const minhas = await S.backend.minhasMensagens();
     S.minhasMsgs = minhas;
     S.respostasNovas = minhas.filter(m => m.resposta && !m.vista).length;
+    await carregarAvisos();
     if (ehAdmin()) S.naoLidas = await S.backend.admContarNaoLidas();
     desenharMenu();
   } catch (e) { console.warn('selos', e); }
@@ -1429,8 +1535,10 @@ async function telaAdmin(c, sub) {
   A.filtroMsg = A.filtroMsg || 'naolidas';
   const [dados, acessos, quem, msgs, sims, online] = await Promise.all([
     S.backend.admUsuarios(), S.backend.admAcessosPorDia(DIAS), S.backend.admAcessosDoDia(A.dia),
-    S.backend.admMensagens(), S.backend.admContarSimulados().catch(() => null), S.backend.contarOnline().catch(() => null)
+    S.backend.admMensagens(), S.backend.admContarSimulados().catch(() => null), S.backend.contarOnline().catch(() => null),
+    carregarAvisos()
   ]);
+  const marcadas = Object.entries(S.avisos || {}).filter(([id]) => Q[id] && avisoDe(id)).sort((a, b) => (b[1].em || 0) - (a[1].em || 0));
   A.dados = dados;
   const us = dados.usuarios;
   const nomes = Object.fromEntries(us.map(u => [u.uid, u.username]));
@@ -1466,15 +1574,27 @@ async function telaAdmin(c, sub) {
       ${listaMsg.length ? `<div class="lista-msg">${listaMsg.map(m => `
         <article class="msg ${m.lida ? '' : 'msg-nova'}" data-mid="${m.id}">
           <div class="msg-topo">${pilulaTipo(m.tipo)}<b>${esc(m.u || nomes[m.uid] || '(usuário removido)')}</b><span class="apagado pequeno">${fmtData(m.criadoEm, true)}</span>${m.lida ? '' : '<span class="pilula p-fcc">NÃO LIDA</span>'}</div>
-          ${m.qid ? `<div class="pequeno texto2">Questão: ${rotuloQuestao(m.qid)}</div>` : ''}
+          ${m.qid ? `<div class="pequeno texto2">Questão: ${rotuloQuestao(m.qid)} ${pilulaAviso(m.qid)}</div>` : ''}
           <p class="msg-texto">${esc(m.texto)}</p>
           ${m.resposta ? `<div class="msg-resposta"><div class="pequeno" style="font-weight:800;color:var(--ouro)">Sua resposta · ${fmtData(m.respondidaEm, true)}${m.vista ? ' · lida pelo usuário' : ''}</div><p class="msg-texto">${esc(m.resposta)}</p></div>` : ''}
           <textarea class="adm-resp" rows="2" maxlength="${MAX_MSG}" placeholder="${m.resposta ? 'Editar a resposta…' : 'Escrever uma resposta (aparece para o usuário em “Fale comigo”)…'}"></textarea>
           <div class="botoes" style="margin-top:8px">
             <button class="btn btn-ouro btn-peq" data-acao="adm-responder" data-id="${m.id}">Responder</button>
             <button class="btn btn-peq" data-acao="adm-lida" data-id="${m.id}" data-v="${m.lida ? 0 : 1}">${m.lida ? 'Marcar como não lida' : 'Marcar como lida'}</button>
+            ${m.qid && Q[m.qid] ? `<button class="btn btn-peq btn-aviso" data-acao="adm-aviso" data-id="${esc(m.qid)}">${avisoDe(m.qid) ? '⚠ Editar marcação da questão' : '⚠ Marcar esta questão'}</button>` : ''}
             <button class="btn btn-texto btn-peq" data-acao="adm-excluir-msg" data-id="${m.id}">Excluir</button></div>
         </article>`).join('')}</div>` : `<div class="vazio">${A.filtroMsg === 'todas' ? 'Nenhuma mensagem ainda.' : 'Nenhuma mensagem não lida. 🎉'}</div>`}
+    </section>
+
+    <section class="cartao" style="margin-top:16px" id="adm-avisos">
+      <div class="q-barra"><h2 style="margin:0">Questões anuladas ou desatualizadas <span class="apagado pequeno">(${marcadas.length})</span></h2>
+        <button class="btn btn-ouro btn-peq" data-acao="adm-aviso">+ Marcar questão</button></div>
+      <p class="texto2 pequeno" style="margin-top:0">O aluno vê uma faixa de aviso na questão (com a sua nota), pode excluí-las nos filtros, e o simulado deixa de sorteá-las. Os pontos do ranking não mudam.</p>
+      ${marcadas.length ? `<div class="rolagem"><table class="tabela"><thead><tr><th>Questão</th><th>Situação</th><th>Nota para o aluno</th><th class="some-cel">Marcada em</th><th></th></tr></thead><tbody>
+        ${marcadas.map(([id, a]) => { const q = Q[id]; return `<tr><td><b>${esc(id)}</b><div class="pequeno apagado">${esc(MAT[q.m].curto)} · ${q.tp}. ${esc(TOP[q.m + ':' + q.tp])}</div></td>
+          <td>${pilulaAviso(id)}</td><td class="pequeno">${a.n ? esc(a.n) : '<span class="apagado">(texto padrão)</span>'}</td><td class="some-cel pequeno">${fmtData(a.em, true)}</td>
+          <td><div class="botoes" style="flex-wrap:nowrap"><button class="btn btn-peq" data-acao="adm-aviso" data-id="${esc(id)}">Editar</button><button class="btn btn-texto btn-peq" data-acao="adm-desmarcar" data-id="${esc(id)}">Desmarcar</button></div></td></tr>`; }).join('')}
+      </tbody></table></div>` : '<p class="apagado" style="margin-bottom:0">Nenhuma questão marcada. Quando chegar um aviso de erro, use o botão “⚠ Marcar esta questão” na mensagem, ou “+ Marcar questão” aqui.</p>'}
     </section>
 
     <div class="grade g2" style="margin-top:16px">
@@ -1532,6 +1652,49 @@ Object.assign(ACOES, {
         }
       }]
     });
+  },
+  'adm-aviso': async (el) => {
+    const qid0 = el.dataset.id || '';
+    const a0 = avisoDe(qid0);
+    const ok = await modal({
+      titulo: a0 ? 'Editar marcação da questão' : 'Marcar questão',
+      corpo: `<label class="campo"><span>Código da questão</span><input type="text" id="av-qid" maxlength="12" placeholder="DTRAB-001" value="${esc(qid0)}" ${qid0 ? 'readonly' : ''} style="text-transform:uppercase"></label>
+        <div class="pequeno texto2" id="av-rot" style="margin:-6px 0 12px">${qid0 ? rotuloQuestao(qid0) : 'Digite o código que aparece no canto da questão.'}</div>
+        <div class="campo"><span>Situação</span><div class="seg" id="av-tipo">
+          <button type="button" data-t="anulada" class="${a0?.t !== 'desatualizada' ? 'ativa' : ''}">Anulada</button>
+          <button type="button" data-t="desatualizada" class="${a0?.t === 'desatualizada' ? 'ativa' : ''}">Desatualizada</button></div></div>
+        <label class="campo"><span>Nota para o aluno <span class="apagado">(opcional, até 300 caracteres)</span></span>
+          <textarea id="av-nota" rows="3" maxlength="300" style="resize:vertical" placeholder="">${esc(a0?.n || '')}</textarea></label>
+        <p class="pequeno texto2" style="margin-top:-6px">Se deixar em branco, aparece: <i id="av-padrao"></i></p>
+        <div class="erro-form" id="av-erro"></div>`,
+      aoAbrir: raiz => {
+        const tipo = () => $('#av-tipo .ativa', raiz).dataset.t;
+        const exemplo = { anulada: 'Ex.: anulada pela banca no gabarito definitivo (TRT-x 2025).', desatualizada: 'Ex.: a Súmula 000 do TST foi cancelada em 2026; hoje a resposta seria a letra C.' };
+        const atualizar = () => { $('#av-padrao', raiz).textContent = TEXTO_AVISO[tipo()]; $('#av-nota', raiz).placeholder = exemplo[tipo()]; };
+        $('#av-tipo', raiz).addEventListener('click', e => { const b = e.target.closest('[data-t]'); if (!b) return; $$('#av-tipo button', raiz).forEach(x => x.classList.toggle('ativa', x === b)); atualizar(); });
+        const inp = $('#av-qid', raiz);
+        inp.addEventListener('input', () => { const id = inp.value.trim().toUpperCase(); $('#av-rot', raiz).innerHTML = Q[id] ? rotuloQuestao(id) + ' ' + pilulaAviso(id) : (id ? '<span style="color:var(--verm)">Código não encontrado.</span>' : 'Digite o código que aparece no canto da questão.'); });
+        atualizar();
+        if (qid0) setTimeout(() => $('#av-nota', raiz).focus(), 0);
+      },
+      botoes: [{ rot: 'Cancelar', cls: 'btn-texto', valor: null }, {
+        rot: a0 ? 'Salvar' : 'Marcar questão', cls: 'btn-ouro', acao: async raiz => {
+          const qid = $('#av-qid', raiz).value.trim().toUpperCase();
+          const er = $('#av-erro', raiz);
+          if (!Q[qid]) { er.textContent = 'Código de questão não encontrado (ex.: DTRAB-001).'; return false; }
+          const t = $('#av-tipo .ativa', raiz).dataset.t;
+          const n = $('#av-nota', raiz).value.trim().slice(0, 300);
+          try { await salvarAviso(qid, { t, n, em: Date.now() }); return qid; }
+          catch (e) { console.error(e); er.textContent = e?.code === 'permission-denied' ? 'O servidor recusou. As regras novas do Firestore já foram publicadas?' : msgErro(e); return false; }
+        }
+      }]
+    });
+    if (ok) { toast(`Questão ${ok} marcada como ${avisoDe(ok).t}.`); render(); }
+  },
+  'adm-desmarcar': async (el) => {
+    const id = el.dataset.id;
+    if (!await confirmar('Desmarcar a questão?', `A faixa de aviso some da questão <b>${esc(id)}</b>, e ela volta a aparecer normalmente nos filtros e nos simulados.`, 'Desmarcar')) return;
+    await salvarAviso(id, null); toast('Questão desmarcada.'); render();
   },
   'adm-atualizar': () => { render(); },
   'adm-dia': (el) => { S.adm.dia = el.dataset.dia; render(); },
@@ -1678,7 +1841,9 @@ setTimeout(avisoCookies, 600);
 /* ================================================================== INÍCIO */
 async function entrarNoApp() {
   if (await S.backend.bloqueado()) return telaBloqueado();
+  const avisos = carregarAvisos();
   S.doc = await S.backend.carregarDoc();
+  await avisos;
   if (!S.doc) return telaEscolherNome();
   // garante estrutura
   ['r', 'dias'].forEach(k => { S.doc[k] = S.doc[k] || {}; });
@@ -1693,7 +1858,7 @@ async function entrarNoApp() {
   atualizarSelos();
 }
 async function aoMudarUsuario(u) {
-  S.user = u;
+  S.user = u; S.riscos = null;
   $('#carregando').hidden = true;
   if (!u) { S.doc = null; pararPresenca(); return telaLogin(); }
   try { await entrarNoApp(); }

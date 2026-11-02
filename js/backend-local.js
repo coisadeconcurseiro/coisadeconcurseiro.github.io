@@ -184,6 +184,8 @@ export function criarBackendLocal() {
       gravar(db);
     },
     async admDesbloquear(uid) { const db = ler(); delete db.bloqueios[uid]; gravar(db); },
+    async avisosQuestoes() { return ler().avisos || {}; },
+    async admSalvarAvisos(q) { const db = ler(); db.avisos = q; gravar(db); },
     async excluirConta(senha) {
       const db = ler();
       const c = db.contas[atual.uid];
